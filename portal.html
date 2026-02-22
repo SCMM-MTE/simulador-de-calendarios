@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Simuladores de Calendarios</title>
+    
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        /* BASE & TYPOGRAPHY */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; overflow: hidden; height: 100vh; width: 100vw; margin: 0; }
+
+        /* --- ESTILOS DE CELDA --- */
+        .cell-base { display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 13px; border: 1px solid #f0f0f0; cursor: pointer; height: 100%; width: 100%; position: relative; transition: all 0.1s ease; }
+        .cell-base:hover { background-color: #f8fafc; border-color: #cbd5e1; }
+
+        /* ESTADOS DE DESCANSO Y SELECCIÓN BASE */
+        .descanso-yellow { background-color: #fef9c3 !important; border: 1px solid #fde047 !important; cursor: not-allowed !important; }
+        .descanso-yellow:hover { background-color: #fef9c3 !important; border-color: #fde047 !important; }
+        
+        .descanso-red { background-color: #fee2e2 !important; border: 1px solid #f87171 !important; color: #991b1b !important; font-weight: bold; cursor: not-allowed !important; }
+        .descanso-red:hover { background-color: #fca5a5 !important; }
+
+        /* COLORES CALENDARIO A */
+        .sel-selected { background-color: #fef08a !important; color: #854d0e !important; border: 2px solid #eab308 !important; font-weight: 800; z-index: 10; }
+        .sel-confirmed { background-color: #dbeafe !important; color: #1e40af !important; border: 2px solid #2563eb !important; font-weight: 800; }
+
+        /* COLORES CALENDARIO C */
+        .ccr-selected { background-color: #fce7f3 !important; color: #be185d !important; font-weight: 800; border: 2px solid #db2777 !important; z-index: 10; }
+        .ccr-blocked { background-color: #374151 !important; color: #9ca3af !important; text-decoration: line-through; border: 1px solid #1f2937 !important; cursor: not-allowed !important; }
+        .ccr-incompatible { background-color: #fff1f2 !important; color: #ef4444 !important; border: 2px dashed #f87171 !important; cursor: not-allowed !important; opacity: 0.8; }
+        .ccr-high { background-color: #dcfce7 !important; color: #15803d !important; font-weight: 600; border: 1px solid #86efac !important; }
+        .ccr-medium { background-color: #ffedd5 !important; color: #c2410c !important; font-weight: 600; border: 1px solid #fdba74 !important; }
+        .ccr-low { background-color: #fee2e2 !important; color: #b91c1c !important; font-weight: 600; border: 1px solid #fca5a5 !important; }
+
+        .is-festivo { color: #dc2626; font-weight: bold; }
+        
+        /* CUPO INDICATOR */
+        .cupo-badge { font-size: 9px; padding: 1px 4px; border-radius: 4px; margin-top: 2px; font-weight: bold; color: white; min-width: 18px; text-align: center; }
+        .cupo-ok { background-color: #4ade80; } 
+        .cupo-low { background-color: #facc15; color: #854d0e; } 
+        .cupo-empty { background-color: #ef4444; } 
+
+        /* ESTILOS NUEVOS Y LAYOUT */
+        .icon-overlay { font-size: 10px; margin-left: 2px; line-height: 1; }
+        .toggle-btn { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; }
+        .toggle-on { background-color: #dcfce7; color: #166534; border-color: #86efac; }
+        .toggle-off { background-color: #f3f4f6; color: #6b7280; border-color: #e5e7eb; }
+
+        .panel { background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e5e7eb; }
+        .custom-select { background-color: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 4px 8px; font-size: 11px; outline: none; color: #333; width: 100%; }
+        .custom-scroll::-webkit-scrollbar { width: 5px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="root" class="h-full w-full"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useCallback, useEffect } = React;
+
+        // ==========================================
+        // DATOS Y CONSTANTES GLOBALES
+        // ==========================================
+        const ANCHOR_MONDAY = new Date(2021, 0, 4); 
+        const SEQUENCE = [[1, 6, 0], [6, 0], [4, 5], [2, 3]];
+        const SUBBLOQUES = ["A1","A2","A3","B1","B2","B3","C1","C2","C3"];
+        
+        const MTE_PER_BLOCK_GROUP = 40; 
+        const MTE_PER_SUBBLOCK = MTE_PER_BLOCK_GROUP / 9;
+
+        // DISTRIBUCIÓN POBLACIONAL MTE EXACTA A TUS 6 PERIODOS (Suman 100%)
+        const MTE_WEIGHTS = { 1: 0.2000, 2: 0.0509, 3: 0.2000, 4: 0.2000, 5: 0.1250, 6: 0.2241 };
+
+        // TABLA DE VACACIONES EXACTA (6 Periodos + PFA Corregidos según lo indicado)
+        // m: 0=Ene, 1=Feb, 2=Mar, 3=Abr, 4=May, 5=Jun, 6=Jul, 7=Ago, 8=Sep, 9=Oct, 10=Nov, 11=Dic
+        const VACATION_DATA = [
+            // 1. 16 Junio - 15 Julio (PFA Principio año)
+            { id: 1, label: "16 Jun - 15 Jul", summer: { start: {d:16, m:5}, end: {d:15, m:6} }, pfa: [{ label: "1 Ene - 28 Ene", start: {d:1, m:0}, end: {d:28, m:0} }, { label: "25 Feb - 24 Mar", start: {d:25, m:1}, end: {d:24, m:2} }, { label: "26 Mar - 22 Abr", start: {d:26, m:2}, end: {d:22, m:3} }, { label: "24 Abr - 21 May", start: {d:24, m:3}, end: {d:21, m:4} }] },
+            // 2. 1 Julio - 31 Julio (PFA Principio año)
+            { id: 2, label: "1 Jul - 31 Jul", summer: { start: {d:1, m:6}, end: {d:31, m:6} }, pfa: [{ label: "1 Ene - 28 Ene", start: {d:1, m:0}, end: {d:28, m:0} }, { label: "25 Feb - 24 Mar", start: {d:25, m:1}, end: {d:24, m:2} }, { label: "26 Mar - 22 Abr", start: {d:26, m:2}, end: {d:22, m:3} }, { label: "24 Abr - 21 May", start: {d:24, m:3}, end: {d:21, m:4} }] },
+            // 3. 16 Julio - 7 Agosto (PFA Principio año)
+            { id: 3, label: "16 Jul - 7 Ago", summer: { start: {d:16, m:6}, end: {d:7, m:7} }, pfa: [{ label: "1 Ene - 28 Ene", start: {d:1, m:0}, end: {d:28, m:0} }, { label: "25 Feb - 24 Mar", start: {d:25, m:1}, end: {d:24, m:2} }, { label: "26 Mar - 22 Abr", start: {d:26, m:2}, end: {d:22, m:3} }, { label: "24 Abr - 21 May", start: {d:24, m:3}, end: {d:21, m:4} }] },
+            // 4. 8 Agosto - 31 Agosto (PFA Intermedios)
+            { id: 4, label: "8 Ago - 31 Ago", summer: { start: {d:8, m:7}, end: {d:31, m:7} }, pfa: [{ label: "23 May - 12 Jun", start: {d:23, m:4}, end: {d:12, m:5} }, { label: "18 Nov - 8 Dic", start: {d:18, m:10}, end: {d:8, m:11} }] },
+            // 5. 1 Agosto - 31 Agosto (PFA Intermedios)
+            { id: 5, label: "1 Ago - 31 Ago", summer: { start: {d:1, m:7}, end: {d:31, m:7} }, pfa: [{ label: "23 May - 12 Jun", start: {d:23, m:4}, end: {d:12, m:5} }, { label: "18 Nov - 8 Dic", start: {d:18, m:10}, end: {d:8, m:11} }] },
+            // 6. 1 Septiembre - 30 Septiembre (PFA Final de año - El Swap Aplicado)
+            { id: 6, label: "1 Sep - 30 Sep", summer: { start: {d:1, m:8}, end: {d:30, m:8} }, pfa: [{ label: "26 Oct - 15 Nov", start: {d:26, m:9}, end: {d:15, m:10} }, { label: "11 - 31 Dic", start: {d:11, m:11}, end: {d:31, m:11} }] }
+        ];
+
+        const CUPOS_BASE = {
+            0: [155, 18, 171], 1: [155, 18, 171], 2: [155, 18, 171], 3: [147, 15, 168], 4: [147, 15, 168],
+            5: { q1:[138, 15, 165], q2:[76, 10, 128] }, 6: [68, 10, 100], 7: [62, 10, 94],
+            8: [71, 10, 108], 9: [138, 15, 165], 10: [120, 10, 160], 11: [88, 10, 123]
+        };
+
+        // ==========================================
+        // COMPONENTE MES
+        // ==========================================
+        function Month({ tipo, monthIdx, year, groupShift, redDaysSet, getCupo, selectedDays, onDayClick, isConfirmed, festivos, anchorMonday, sequence, getVacationStatus, cyclesC, selectedCycleC }) {
+            const date = new Date(year, monthIdx, 1);
+            const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+            const firstDayIdx = new Date(year, monthIdx, 1).getDay();
+            const blanks = firstDayIdx === 0 ? 6 : firstDayIdx - 1; 
+
+            const days = [];
+            for (let d = 1; d <= daysInMonth; d++) {
+                const current = new Date(year, monthIdx, d);
+                const dayOfWeek = current.getDay();
+                const esSD = (dayOfWeek === 0 || dayOfWeek === 6);
+                const dayId = `${monthIdx}-${d}`;
+                const esF = festivos.includes(dayId);
+                
+                // LÓGICA DESCANSOS BASE
+                const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+                const currentMonday = new Date(current);
+                currentMonday.setDate(current.getDate() - diffToMonday);
+                currentMonday.setHours(0,0,0,0);
+                
+                const weeksBetween = Math.round((currentMonday - anchorMonday) / (7 * 24 * 60 * 60 * 1000));
+                let seqIdx = (weeksBetween - groupShift) % 4;
+                if (seqIdx < 0) seqIdx += 4;
+                const isDescansoA = sequence[seqIdx].includes(dayOfWeek);
+
+                // LÓGICA LICENCIAS B
+                const isDescansoB = tipo === 'B' && redDaysSet.has(dayId);
+
+                // LÓGICA CALENDARIO C
+                const currentCycle = tipo === 'C' ? cyclesC.find(c => current >= c.start && current <= c.end) : null;
+                const isCCRBase = tipo === 'C' ? (seqIdx === 0 || seqIdx === 1 || (seqIdx === 2 && dayOfWeek === 1)) : false;
+
+                // LÓGICA VACACIONES
+                const { isSummer, isPfa } = getVacationStatus(current);
+                const isVacation = isSummer || isPfa;
+
+                const cupo = getCupo(monthIdx, d, esSD, esF);
+                const isSelectedA = tipo === 'A' && selectedDays.includes(dayId);
+                const isSelectedC = tipo === 'C' && selectedCycleC && (current >= selectedCycleC.start && current <= selectedCycleC.end);
+
+                // JERARQUÍA DE ESTILOS VISUALES
+                let baseClass = "cell-base";
+                
+                if (tipo === 'C') {
+                    if (isSelectedC) {
+                        baseClass += " ccr-selected";
+                    } else if (currentCycle && currentCycle.isBlocked) {
+                        baseClass += " ccr-blocked";
+                    } else if (isDescansoA) {
+                        baseClass += " descanso-yellow";
+                    } else if (isCCRBase && currentCycle) {
+                        if (currentCycle.isIncompatible) baseClass += " bg-red-50 text-red-300";
+                        else if (currentCycle.availabilityLevel === 'low') baseClass += " ccr-low";
+                        else if (currentCycle.availabilityLevel === 'medium') baseClass += " ccr-medium";
+                        else if (currentCycle.availabilityLevel === 'high') baseClass += " ccr-high";
+                    }
+                } else {
+                    if (isDescansoB) baseClass += " descanso-red";
+                    else if (isDescansoA) baseClass += " descanso-yellow";
+                    else if (isSelectedA) baseClass += isConfirmed ? " sel-confirmed" : " sel-selected";
+                    else if (cupo === 0 && tipo === 'A') baseClass += " bg-red-50"; 
+                }
+
+                // Opacidad por Bloqueos
+                let isOpacity60 = false;
+                if (isVacation && !isSelectedA && !isSelectedC) isOpacity60 = true;
+                if ((tipo === 'A' || tipo === 'C') && cupo === 0 && !isSelectedA && !isDescansoA && !isDescansoB && tipo !== 'C') isOpacity60 = true;
+
+                let badgeClass = "cupo-ok";
+                if (cupo === 0) badgeClass = "cupo-empty";
+                else if (cupo <= 5) badgeClass = "cupo-low";
+
+                days.push({ 
+                    d, esSD, esF, isDescansoA, isDescansoB, isVacation, isSummer, isPfa, 
+                    cupo, badgeClass, baseClass, isSelectedA, isOpacity60 
+                });
+            }
+
+            return (
+                <div className="bg-white rounded-lg border border-gray-200 p-2 shadow-sm h-full flex flex-col overflow-hidden">
+                    <h3 className="text-[#2563eb] font-bold text-center text-xs capitalize mb-1 pb-1 border-b border-gray-100 shrink-0">
+                        {new Intl.DateTimeFormat('es-ES', { month: 'long' }).format(date)}
+                    </h3>
+                    <div className="flex-1 flex flex-col min-h-0">
+                        <div className="grid grid-cols-7 gap-px text-center text-[9px] font-bold text-gray-400 mb-1 shrink-0">
+                            {['L','M','X','J','V','S','D'].map(d => <div key={d}>{d}</div>)}
+                        </div>
+                        <div className="grid grid-cols-7 grid-rows-6 gap-[1px] flex-1">
+                            {Array(blanks).fill(0).map((_, i) => <div key={`b-${i}`}></div>)}
+                            {days.map((dayObj) => (
+                                <div 
+                                    key={dayObj.d} 
+                                    onClick={() => {
+                                        if (tipo === 'B' || tipo === 'C') return; 
+                                        if (dayObj.isDescansoA || dayObj.isDescansoB) return; 
+                                        if (dayObj.isVacation && !dayObj.isSelectedA) return; 
+                                        if (dayObj.cupo > 0 || dayObj.isSelectedA) onDayClick(monthIdx, dayObj.d, dayObj.esSD, dayObj.esF, dayObj.isDescansoA || dayObj.isDescansoB, dayObj.isVacation);
+                                    }}
+                                    className={`${dayObj.baseClass} ${dayObj.isOpacity60 ? 'cursor-not-allowed opacity-60' : ''}`}
+                                >
+                                    <span className={`text-[10px] leading-none flex items-center justify-center ${dayObj.esF || dayObj.esSD ? 'text-red-500 font-bold' : (dayObj.isDescansoB ? 'text-red-800 font-bold' : 'text-gray-700')}`}>
+                                        {dayObj.d}
+                                        {dayObj.isSummer && <span className="icon-overlay">☀️</span>}
+                                        {dayObj.isPfa && <span className="icon-overlay">❄️</span>}
+                                    </span>
+                                    {tipo === 'A' && (
+                                        <div className={`cupo-badge ${dayObj.badgeClass}`}>{dayObj.cupo}</div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ==========================================
+        // MOTOR PRINCIPAL DEL SIMULADOR
+        // ==========================================
+        function SimuladorEngine({ tipo, onBack }) {
+            const [year, setYear] = useState(2027);
+            const [block, setBlock] = useState(1);
+            const [subBlockIdx, setSubBlockIdx] = useState(0);
+            
+            const [groupShift, setGroupShift] = useState(0); 
+            const [subGroupIdx, setSubGroupIdx] = useState(0); 
+
+            const [enableVacations, setEnableVacations] = useState(false);
+            const [vacationRowId, setVacationRowId] = useState("");
+            const [pfaIdx, setPfaIdx] = useState(0);
+
+            const [selectedDays, setSelectedDays] = useState([]);
+            const [isConfirmed, setIsConfirmed] = useState(false);
+
+            const [selectedCycleC, setSelectedCycleC] = useState(null);
+
+            const monthsToRender = tipo === 'A' ? Array.from({ length: 11 }, (_, i) => i + 1) : Array.from({ length: 12 }, (_, i) => i);
+
+            // Cálculos MTE exactos
+            const mtePrecedentesA = useMemo(() => {
+                return Math.floor(((block - 1) * 160) + (subBlockIdx * (160/9)));
+            }, [block, subBlockIdx]);
+
+            const mtePrecedentesCLocal = useMemo(() => {
+                return ((block - 1) * 9 + subBlockIdx) * MTE_PER_SUBBLOCK;
+            }, [block, subBlockIdx]);
+
+            const mtePrecedentesCGlobal = useMemo(() => mtePrecedentesCLocal * 4, [mtePrecedentesCLocal]);
+
+            // =========================================================================
+            // IA POBLACIONAL DE MTE (Comportamiento realista por cohortes de vacaciones)
+            // =========================================================================
+            const mtePersonas = useMemo(() => {
+                const list = [];
+                let idCounter = 0;
+                [1, 2, 3, 4, 5, 6].forEach(vacId => {
+                    const row = VACATION_DATA.find(v => v.id === vacId);
+                    const weightPerPfa = MTE_WEIGHTS[vacId] / row.pfa.length; 
+                    row.pfa.forEach(pfa => {
+                        list.push({
+                            id: idCounter++,
+                            weight: weightPerPfa, 
+                            summerStart: new Date(year, row.summer.start.m, row.summer.start.d).getTime(),
+                            summerEnd: new Date(year, row.summer.end.m, row.summer.end.d).getTime(),
+                            pfaStart: new Date(year, pfa.start.m, pfa.start.d).getTime(),
+                            pfaEnd: new Date(year, pfa.end.m, pfa.end.d).getTime()
+                        });
+                    });
+                });
+                return list;
+            }, [year]);
+
+            // =========================================================================
+            // EL MOTOR MATEMÁTICO DE LICENCIAS B (SECUENCIA L-M -> X -> J-V)
+            // =========================================================================
+            const redDaysSet = useMemo(() => {
+                const reds = new Set();
+                if (tipo !== 'B') return reds;
+
+                const firstDayOfYear = new Date(year, 0, 1);
+                const dayOfFirst = firstDayOfYear.getDay();
+                const daysToFirstMonday = dayOfFirst === 1 ? 0 : (dayOfFirst === 0 ? 1 : 8 - dayOfFirst);
+                const firstMonday = new Date(year, 0, 1 + daysToFirstMonday);
+                firstMonday.setHours(0,0,0,0);
+
+                const posMod = (n, m) => ((n % m) + m) % m;
+
+                for (let w = -4; w <= 56; w++) {
+                    const currentMonday = new Date(firstMonday);
+                    currentMonday.setDate(firstMonday.getDate() + w * 7);
+                    
+                    const weeksBetween = Math.round((currentMonday - ANCHOR_MONDAY) / (7 * 24 * 60 * 60 * 1000));
+                    const groupWeek = posMod(weeksBetween - groupShift, 24);
+                    
+                    const phase = groupWeek % 4; 
+                    const cycle = Math.floor(groupWeek / 4); 
+                    
+                    let daysOffset = []; 
+                    
+                    if (phase === 1) {
+                        if (subGroupIdx === posMod(cycle + 1, 6)) {
+                            daysOffset = [0, 1]; // L-M
+                        } else if (subGroupIdx === posMod(cycle + 3, 6)) {
+                            daysOffset = [3, 4]; // J-V
+                        }
+                    } else if (phase === 2) {
+                        if (subGroupIdx === posMod(cycle + 5, 6)) {
+                            daysOffset = [2]; // X
+                        }
+                    }
+
+                    if (daysOffset.length > 0) {
+                        for (let offset of daysOffset) {
+                            const targetDate = new Date(currentMonday);
+                            targetDate.setDate(currentMonday.getDate() + offset);
+                            if (targetDate.getFullYear() === year) {
+                                reds.add(`${targetDate.getMonth()}-${targetDate.getDate()}`);
+                            }
+                        }
+                    }
+                }
+                return reds;
+            }, [year, groupShift, subGroupIdx, tipo]);
+
+
+            // ==============================================
+            // GENERADOR DE PERIODOS CALENDARIO C 
+            // ==============================================
+            const getVacationRanges = useMemo(() => {
+                if (!enableVacations || !vacationRowId) return null;
+                const row = VACATION_DATA.find(v => v.id === parseInt(vacationRowId));
+                if (!row) return null;
+                const summerStart = new Date(year, row.summer.start.m, row.summer.start.d).getTime();
+                const summerEnd = new Date(year, row.summer.end.m, row.summer.end.d).getTime();
+                const pfaOpt = row.pfa[pfaIdx] || row.pfa[0];
+                const pfaStart = new Date(year, pfaOpt.start.m, pfaOpt.start.d).getTime();
+                const pfaEnd = new Date(year, pfaOpt.end.m, pfaOpt.end.d).getTime();
+                return { summerStart, summerEnd, pfaStart, pfaEnd };
+            }, [year, vacationRowId, pfaIdx, enableVacations]);
+
+            const getVacationStatus = useCallback((date) => {
+                if (!getVacationRanges) return { isSummer: false, isPfa: false };
+                const t = date.getTime();
+                return {
+                    isSummer: t >= getVacationRanges.summerStart && t <= getVacationRanges.summerEnd,
+                    isPfa: t >= getVacationRanges.pfaStart && t <= getVacationRanges.pfaEnd
+                };
+            }, [getVacationRanges]);
+
+            const cyclesC = useMemo(() => {
+                if (tipo !== 'C') return [];
+                
+                const rawList = [];
+                let current = new Date(year, 0, 1);
+                current.setDate(current.getDate() + (current.getDay() === 0 ? 1 : (8 - current.getDay()) % 7));
+
+                while (current.getFullYear() <= year) {
+                    const weeksBetween = Math.round((current - ANCHOR_MONDAY) / (7 * 24 * 60 * 60 * 1000));
+                    let seqIdx = (weeksBetween - groupShift) % 4;
+                    if (seqIdx < 0) seqIdx += 4;
+
+                    if (seqIdx === 0) { 
+                        const start = new Date(current);
+                        const end = new Date(current);
+                        end.setDate(start.getDate() + 14); 
+                        
+                        const month = start.getMonth();
+                        let weight = 10;
+                        if (month === 7) weight = 100;      
+                        else if (month === 6) weight = 85;  
+                        else if (month === 5) weight = 60;  
+                        else if (month === 8) weight = 60;  
+                        else if (month === 3 || month === 4) weight = 70; 
+                        else if (month === 11) weight = 65; 
+                        else if (month === 9) weight = 40;  
+                        else weight = 15; 
+
+                        weight -= (start.getDate() * 0.1);
+
+                        const blockedForPersona = {};
+                        for (let p of mtePersonas) {
+                            let overlap = 0;
+                            for (let t = start.getTime(); t <= end.getTime(); t += 86400000) {
+                                if ((t >= p.summerStart && t <= p.summerEnd) || (t >= p.pfaStart && t <= p.pfaEnd)) {
+                                    overlap++;
+                                }
+                            }
+                            blockedForPersona[p.id] = overlap > 3;
+                        }
+
+                        rawList.push({ id: start.getTime(), start, end, weight, allocated: 0, blockedForPersona });
+                    }
+                    current.setDate(current.getDate() + 7);
+                }
+
+                const CYCLE_CAPACITY = 40;
+                let workList = rawList.map(c => ({...c}));
+                
+                let personasWork = mtePersonas.map(p => ({ ...p, remainingMTE: mtePrecedentesCLocal * p.weight }));
+                
+                let safetyLoop = 0;
+                let movedAny = true;
+                
+                while (movedAny && safetyLoop < 100) {
+                    safetyLoop++;
+                    movedAny = false;
+                    
+                    for (let p of personasWork) {
+                        if (p.remainingMTE < 0.1) continue;
+                        
+                        const availableCycles = workList.filter(c => c.allocated < CYCLE_CAPACITY && !c.blockedForPersona[p.id]);
+                        if (availableCycles.length === 0) continue; 
+
+                        const totalWeight = availableCycles.reduce((sum, c) => sum + c.weight, 0);
+                        let overflowMTE = 0;
+
+                        availableCycles.forEach(c => {
+                            const share = (c.weight / totalWeight) * p.remainingMTE;
+                            const spaceAvailable = CYCLE_CAPACITY - c.allocated;
+                            
+                            if (share > spaceAvailable) {
+                                c.allocated += spaceAvailable;
+                                overflowMTE += (share - spaceAvailable);
+                            } else {
+                                c.allocated += share;
+                            }
+                            movedAny = true;
+                        });
+                        p.remainingMTE = overflowMTE;
+                    }
+                }
+
+                const processedList = workList.map(cycle => {
+                    const occupationPercent = (cycle.allocated / CYCLE_CAPACITY) * 100;
+                    const remainingCupo = Math.max(0, Math.round(CYCLE_CAPACITY - cycle.allocated));
+                    const isBlocked = remainingCupo === 0; 
+
+                    let isIncompatible = false;
+                    let overlapCount = 0;
+
+                    if (getVacationRanges) {
+                        const { summerStart, summerEnd, pfaStart, pfaEnd } = getVacationRanges;
+                        const cStart = cycle.start.getTime();
+                        const cEnd = cycle.end.getTime();
+                        const dayMs = 24 * 60 * 60 * 1000;
+                        for (let t = cStart; t <= cEnd; t += dayMs) {
+                            if ((t >= summerStart && t <= summerEnd) || (t >= pfaStart && t <= pfaEnd)) {
+                                overlapCount++;
+                            }
+                        }
+                        if (overlapCount > 3) isIncompatible = true;
+                    }
+
+                    let availabilityLevel = 'high';
+                    if (isBlocked) availabilityLevel = 'blocked';
+                    else if (isIncompatible) availabilityLevel = 'incompatible';
+                    else if (occupationPercent >= 80) availabilityLevel = 'low';
+                    else if (occupationPercent >= 50) availabilityLevel = 'medium';
+
+                    return { ...cycle, isBlocked, isIncompatible, overlapCount, occupationPercent, remainingCupo, availabilityLevel };
+                });
+                
+                return processedList.sort((a, b) => a.start - b.start);
+            }, [year, groupShift, mtePrecedentesCLocal, getVacationRanges, tipo, mtePersonas]);
+
+            // ==============================================
+            // NUEVO MOTOR: ESTADÍSTICAS ANUALES DE TRABAJO/DESCANSO
+            // ==============================================
+            const annualStats = useMemo(() => {
+                let workDays = 0;
+                let restDays = 0;
+                let vacationDays = 0;
+
+                const start = new Date(year, 0, 1);
+                const end = new Date(year, 11, 31);
+
+                for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                    const month = d.getMonth();
+                    const date = d.getDate();
+                    const dayOfWeek = d.getDay();
+                    const dayId = `${month}-${date}`;
+
+                    const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+                    const currentMonday = new Date(d);
+                    currentMonday.setDate(currentMonday.getDate() - diffToMonday);
+                    currentMonday.setHours(0,0,0,0);
+                    
+                    const weeksBetween = Math.round((currentMonday - ANCHOR_MONDAY) / (7 * 24 * 60 * 60 * 1000));
+                    let seqIdx = (weeksBetween - groupShift) % 4;
+                    if (seqIdx < 0) seqIdx += 4;
+                    const isDescansoA = SEQUENCE[seqIdx].includes(dayOfWeek);
+
+                    const isDescansoB = tipo === 'B' && redDaysSet.has(dayId);
+                    const isSelectedA = tipo === 'A' && selectedDays.includes(dayId);
+                    const isSelectedC = tipo === 'C' && selectedCycleC && (d.getTime() >= selectedCycleC.start && d.getTime() <= selectedCycleC.end);
+
+                    let isRest = false;
+                    if (tipo === 'A') isRest = isDescansoA || isSelectedA;
+                    if (tipo === 'B') isRest = isDescansoA || isDescansoB;
+                    if (tipo === 'C') isRest = isDescansoA || isSelectedC;
+
+                    const vStatus = getVacationStatus(d);
+                    const isVacation = vStatus.isSummer || vStatus.isPfa;
+
+                    if (isRest) {
+                        restDays++;
+                    } else if (isVacation) {
+                        vacationDays++;
+                    } else {
+                        workDays++;
+                    }
+                }
+
+                return { workDays, restDays, vacationDays };
+            }, [year, groupShift, tipo, redDaysSet, selectedDays, selectedCycleC, getVacationStatus]);
+
+            useEffect(() => {
+                if (tipo === 'C') setSelectedCycleC(null);
+            }, [vacationRowId, pfaIdx, enableVacations, year, tipo]);
+
+            const handleSelectPeriodC = (cycleObj) => {
+                if (cycleObj.isBlocked) return; 
+
+                if (cycleObj.overlapCount > 3) {
+                    alert(`⚠️ OPERACIÓN DENEGADA\n\nEl periodo seleccionado se solapa en ${cycleObj.overlapCount} días con tus Vacaciones o PFA.\n\nSegún la normativa, el máximo solapamiento permitido es de 3 días.`);
+                    setSelectedCycleC(null);
+                } else {
+                    setSelectedCycleC(cycleObj);
+                    if (cycleObj.overlapCount > 0) {
+                        alert(`✅ PERIODO ACEPTADO\n\nTiene un solapamiento de ${cycleObj.overlapCount} días con tus vacaciones.\nEstos días irán a cómputo al estar dentro del límite legal.`);
+                    }
+                }
+            };
+
+            const getStatusColor = (level, isBg = false) => {
+                switch(level) {
+                    case 'blocked': return isBg ? 'bg-gray-700' : 'ccr-blocked';
+                    case 'incompatible': return isBg ? 'bg-red-500' : 'ccr-incompatible';
+                    case 'low': return isBg ? 'bg-red-500' : 'ccr-low';
+                    case 'medium': return isBg ? 'bg-orange-400' : 'ccr-medium';
+                    case 'high': return isBg ? 'bg-green-500' : 'ccr-high';
+                    default: return '';
+                }
+            };
+
+            const festivosDelAno = useMemo(() => {
+                const fixed = ["0-1", "0-6", "4-1", "4-2", "4-15", "7-15", "9-12", "10-1", "10-9", "11-6", "11-8", "11-25"];
+                const a = year % 19; const b = Math.floor(year / 100); const c = year % 100;
+                const d = Math.floor(b / 4); const e = b % 4; const f = Math.floor((b + 8) / 25);
+                const g = Math.floor((b - f + 1) / 3); const h = (19 * a + b - d - g + 15) % 30;
+                const i = Math.floor(c / 4); const k = c % 4; const l = (32 + 2 * e + 2 * i - h - k) % 7;
+                const m = Math.floor((a + 11 * h + 22 * l) / 451);
+                const month = Math.floor((h + l - 7 * m + 114) / 31) - 1; 
+                const day = ((h + l - 7 * m + 114) % 31) + 1;
+                const easter = new Date(year, month, day);
+                const juevesSanto = new Date(easter); juevesSanto.setDate(easter.getDate() - 3);
+                const viernesSanto = new Date(easter); viernesSanto.setDate(easter.getDate() - 2);
+                return [...fixed, `${juevesSanto.getMonth()}-${juevesSanto.getDate()}`, `${viernesSanto.getMonth()}-${viernesSanto.getDate()}`];
+            }, [year]);
+
+            // ==============================================
+            // ALGORITMO CUPOS CALENDARIO A
+            // ==============================================
+            const getCupoForDay = useCallback((m, d, esSD, esF) => {
+                if (tipo === 'B' || tipo === 'C') return 100; 
+
+                let activeFraction = 1;
+                const t = new Date(year, m, d).getTime();
+                
+                for (let p of mtePersonas) {
+                    if ((t >= p.summerStart && t <= p.summerEnd) || (t >= p.pfaStart && t <= p.pfaEnd)) {
+                        activeFraction -= p.weight;
+                    }
+                }
+                activeFraction = Math.max(0, activeFraction); 
+                const activeMTE = mtePrecedentesA * activeFraction;
+
+                let config = (m === 5) ? (d <= 15 ? CUPOS_BASE[5].q1 : CUPOS_BASE[5].q2) : CUPOS_BASE[m];
+                let base = esSD ? config[1] : (esF ? config[2] : config[0]);
+                let factorPresion = 5; 
+
+                if (esSD && (m === 6 || m === 7)) factorPresion = 25; 
+                else if ((m === 5 && d >= 15) || m === 6 || m === 7 || (m === 8 && d <= 15)) {
+                    if (esSD) factorPresion = 20; else factorPresion = 24; 
+                } else if (m === 11 && d >= 20) {
+                    if (esSD) factorPresion = 15; else factorPresion = 18;
+                } else if (esF) factorPresion = 18; 
+                else if (esSD) factorPresion = 1.5; 
+
+                const consumoRepartido = Math.floor((activeMTE * factorPresion) / 100);
+                let final = base - consumoRepartido;
+                const dayId = `${m}-${d}`;
+                if (selectedDays.includes(dayId)) final -= 1;
+                return Math.max(0, final);
+            }, [mtePrecedentesA, selectedDays, tipo, mtePersonas, year]);
+
+            const globalQuotas = useMemo(() => {
+                if (tipo === 'B' || tipo === 'C') return { total: 0, remaining: 0, labRem: 0, sdRem: 0, festRem: 0 };
+                let total = 0, remaining = 0, labRem = 0, sdRem = 0, festRem = 0;
+                
+                for (let m = 1; m < 12; m++) { 
+                    const daysInMonth = new Date(year, m + 1, 0).getDate();
+                    for (let d = 1; d <= daysInMonth; d++) {
+                        const date = new Date(year, m, d);
+                        const esSD = date.getDay() === 0 || date.getDay() === 6;
+                        const esF = festivosDelAno.includes(`${m}-${d}`);
+                        let config = (m === 5) ? (d <= 15 ? CUPOS_BASE[5].q1 : CUPOS_BASE[5].q2) : CUPOS_BASE[m];
+                        let base = esSD ? config[1] : (esF ? config[2] : config[0]);
+                        let dayRem = getCupoForDay(m, d, esSD, esF);
+                        total += base; remaining += dayRem;
+                        if (esF) festRem += dayRem; else if (esSD) sdRem += dayRem; else labRem += dayRem;
+                    }
+                }
+                return { total, remaining, labRem, sdRem, festRem };
+            }, [year, getCupoForDay, festivosDelAno, tipo]);
+
+            const getCounts = (currentSel) => {
+                let totalLab = 0, totalSDF = 0;
+                currentSel.forEach(id => {
+                    const [m, d] = id.split('-').map(Number);
+                    const date = new Date(year, m, d);
+                    const esSD = date.getDay() === 0 || date.getDay() === 6;
+                    const esF = festivosDelAno.includes(id);
+                    if (!esSD && !esF) totalLab++; else totalSDF++; 
+                });
+                return { lab: Math.min(totalLab, 7), cred: totalSDF + Math.max(0, totalLab - 7) };
+            };
+
+            const handleDayClick = (m, d, esSD, esF, isDescanso, isVacation) => {
+                if (tipo === 'B' || tipo === 'C') return; 
+                if (isConfirmed || isDescanso || isVacation) return; 
+
+                const dayId = `${m}-${d}`;
+                const isSelected = selectedDays.includes(dayId);
+
+                if (isSelected) setSelectedDays(prev => prev.filter(id => id !== dayId));
+                else {
+                    const nextSel = [...selectedDays, dayId];
+                    if (getCounts(nextSel).cred <= 5) setSelectedDays(nextSel);
+                    else alert("Límite alcanzado. Máximo 7 laborables fijos + 5 créditos.");
+                }
+            };
+
+            const currentCounts = getCounts(selectedDays);
+
+            return (
+                <div className="flex h-full w-full p-3 gap-3 box-border bg-[#f4f7f6]">
+                    <div className="flex-1 flex flex-col min-w-0 panel h-full overflow-hidden">
+                        
+                        {/* ================= HEADER TOP ================= */}
+                        <div className="px-5 py-3 border-b border-gray-100 flex flex-col gap-3 bg-white shrink-0">
+                            <div className="flex justify-between items-center w-full">
+                                
+                                {/* 1. TÍTULO Y BOTÓN BACK */}
+                                <div className="flex items-center gap-3">
+                                    <button onClick={onBack} title="Volver al menú principal" className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors cursor-pointer">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                                    </button>
+                                    <h1 className="text-xl font-black text-[#2563eb] leading-none m-0 whitespace-nowrap tracking-tight">
+                                        Calendario <span className="text-gray-800">{tipo}</span>
+                                    </h1>
+                                </div>
+
+                                {/* 2. CONTROLES DE VACACIONES EN LA BARRA SUPERIOR */}
+                                <div className="flex items-center gap-3 bg-orange-50/40 border border-orange-100 px-3 py-1.5 rounded-xl shadow-sm">
+                                    <div className="flex items-center gap-2 border-r border-orange-200 pr-3">
+                                        <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wider">Vacaciones</span>
+                                        <button onClick={() => { setEnableVacations(!enableVacations); setSelectedDays([]); setSelectedCycleC(null); }} className={`toggle-btn ${enableVacations ? 'toggle-on' : 'toggle-off'}`}>
+                                            {enableVacations ? 'ON' : 'OFF'}
+                                        </button>
+                                    </div>
+                                    {enableVacations ? (
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-orange-500 text-sm">☀️</span>
+                                                <select className="custom-select w-36 border-orange-200 shadow-sm" value={vacationRowId} onChange={e => { setVacationRowId(e.target.value); setPfaIdx(0); }}>
+                                                    <option value="">-- Verano --</option>
+                                                    {VACATION_DATA.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-blue-400 text-sm">❄️</span>
+                                                <select className="custom-select w-36 border-blue-200 shadow-sm" value={pfaIdx} onChange={e => setPfaIdx(Number(e.target.value))} disabled={!vacationRowId}>
+                                                    {!vacationRowId && <option>-- PFA --</option>}
+                                                    {vacationRowId && VACATION_DATA.find(v => v.id == vacationRowId)?.pfa.map((w, idx) => <option key={idx} value={idx}>{w.label}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <span className="text-[10px] text-gray-400 italic px-4">Periodos inactivos</span>
+                                    )}
+                                </div>
+
+                                {/* 3. ESTADÍSTICAS MTE / CUPOS */}
+                                <div className="flex items-center gap-4">
+                                    {tipo === 'A' && (
+                                        <>
+                                            <div className="flex flex-col items-end">
+                                                <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">MTE Real (Activo): <span className="text-blue-600 text-sm">{Math.round(mtePrecedentesA)}</span></p>
+                                                <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mt-0.5">Restante: <span className="text-green-600 text-sm">{globalQuotas.remaining}</span></p>
+                                            </div>
+                                            <div className="flex gap-1.5">
+                                                <span className="text-[9px] font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded border border-gray-200 shadow-sm">Lab: <span className="text-gray-800">{globalQuotas.labRem}</span></span>
+                                                <span className="text-[9px] font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded border border-orange-100 shadow-sm">S/D: <span className="text-orange-700">{globalQuotas.sdRem}</span></span>
+                                                <span className="text-[9px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded border border-red-100 shadow-sm">Fest: <span className="text-red-700">{globalQuotas.festRem}</span></span>
+                                            </div>
+                                            <div className="border-l border-gray-200 pl-4 flex gap-2">
+                                                <div className={`flex flex-col items-center px-2.5 py-0.5 rounded shadow-sm border ${currentCounts.lab === 7 ? 'bg-green-50 border-green-300' : 'bg-white border-gray-200'}`}>
+                                                    <span className="text-[8px] font-bold text-gray-400 uppercase">Lab</span>
+                                                    <span className={`text-sm font-black leading-none mt-0.5 ${currentCounts.lab === 7 ? 'text-green-600' : 'text-gray-700'}`}>{currentCounts.lab}/7</span>
+                                                </div>
+                                                <div className={`flex flex-col items-center px-2.5 py-0.5 rounded shadow-sm border ${currentCounts.cred === 5 ? 'bg-green-50 border-green-300' : 'bg-white border-gray-200'}`}>
+                                                    <span className="text-[8px] font-bold text-gray-400 uppercase">Cred</span>
+                                                    <span className={`text-sm font-black leading-none mt-0.5 ${currentCounts.cred === 5 ? 'text-green-600' : 'text-gray-700'}`}>{currentCounts.cred}/5</span>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {/* MTE Poblacional para Calendario C */}
+                                    {tipo === 'C' && (
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex flex-col items-end border-r border-gray-200 pr-4">
+                                                <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                                                    MTE Solicitudes Grupo: <span className="text-purple-600 text-lg ml-1 leading-none">{Math.round(mtePrecedentesCLocal)}</span>
+                                                </p>
+                                                <p className="text-[9px] text-gray-400 uppercase font-bold tracking-wider mt-1">
+                                                    MTE Solicitudes Totales: <span className="text-gray-600 text-xs ml-1 leading-none">{Math.round(mtePrecedentesCGlobal)}</span>
+                                                </p>
+                                            </div>
+                                            <span className="text-[9px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded border border-purple-200 shadow-sm uppercase tracking-wider">
+                                                15 Días Consecutivos
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* GRID MESES */}
+                        <div className="flex-1 p-4 min-h-0 bg-[#f4f7f6]">
+                            <div className={`grid ${tipo === 'A' ? 'grid-cols-4 grid-rows-3' : 'grid-cols-4 grid-rows-3'} gap-4 h-full w-full`}>
+                                {monthsToRender.map(m => (
+                                    <Month 
+                                        key={m} tipo={tipo} monthIdx={m} year={year} 
+                                        groupShift={groupShift} redDaysSet={redDaysSet}
+                                        getCupo={getCupoForDay} selectedDays={selectedDays}
+                                        onDayClick={handleDayClick} isConfirmed={isConfirmed}
+                                        festivos={festivosDelAno} anchorMonday={ANCHOR_MONDAY} sequence={SEQUENCE}
+                                        getVacationStatus={getVacationStatus}
+                                        cyclesC={cyclesC} selectedCycleC={selectedCycleC}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* COLUMNA DERECHA: CONFIGURACIÓN Y PERIODOS */}
+                    <div className="w-64 flex flex-col panel h-full overflow-hidden shrink-0">
+                        <div className="flex-1 overflow-y-auto custom-scroll flex flex-col">
+                            
+                            {/* Panel 1: Configuración de la Posición */}
+                            <div className="p-4 border-b border-gray-100 bg-gray-50 shrink-0">
+                                <h4 className="font-bold text-gray-700 text-xs mb-3 uppercase tracking-wider flex items-center gap-2">
+                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                    Tu Posición
+                                </h4>
+                                <div className="flex flex-col gap-3">
+                                    <div className="flex gap-2">
+                                        <div className="flex-1">
+                                            <label className="text-[9px] font-bold text-gray-500 uppercase">Año Sim.</label>
+                                            <select className="custom-select shadow-sm border-gray-200" value={year} onChange={e => { setYear(Number(e.target.value)); setSelectedDays([]); setSelectedCycleC(null); }}>
+                                                {Array.from({length: 14}, (_, i) => 2027 + i).map(y => <option key={y} value={y}>{y}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="text-[9px] font-bold text-gray-500 uppercase">G. Descanso</label>
+                                            <select className="custom-select shadow-sm border-gray-200" value={groupShift} onChange={e => { setGroupShift(Number(e.target.value)); setSelectedDays([]); setSelectedCycleC(null); }}>
+                                                <option value="0">G1</option><option value="1">G2</option><option value="2">G3</option><option value="3">G4</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    {tipo === 'B' && (
+                                        <div className="flex gap-2">
+                                            <div className="flex-1">
+                                                <label className="text-[9px] font-bold text-red-500 uppercase">Subgrupo Licencias</label>
+                                                <select className="custom-select shadow-sm border-red-200 bg-red-50" value={subGroupIdx} onChange={e => setSubGroupIdx(Number(e.target.value))}>
+                                                    {[1,2,3,4,5,6].map(s => <option key={s} value={s-1}>Subgrupo {s}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {(tipo === 'A' || tipo === 'C') && (
+                                        <div className="flex gap-2">
+                                            <div className="flex-1">
+                                                <label className="text-[9px] font-bold text-gray-500 uppercase">Bloque</label>
+                                                <select className="custom-select shadow-sm border-gray-200" value={block} onChange={e => { setBlock(Number(e.target.value)); setSelectedCycleC(null); }}>
+                                                    {Array.from({length:13},(_,i)=>i+1).map(b => <option key={b} value={b}>Bloque {b}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="text-[9px] font-bold text-gray-500 uppercase">Subbloque</label>
+                                                <select className="custom-select shadow-sm border-gray-200" value={subBlockIdx} onChange={e => { setSubBlockIdx(Number(e.target.value)); setSelectedCycleC(null); }}>
+                                                    {SUBBLOQUES.map((s, idx) => <option key={idx} value={idx}>{s}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* NUEVO PANEL: RESUMEN ANUAL INTELIGENTE */}
+                            <div className="p-4 border-b border-gray-100 bg-white shrink-0">
+                                <h4 className="font-bold text-gray-700 text-xs mb-3 uppercase tracking-wider flex items-center gap-2">
+                                    📊 Resumen Anual
+                                </h4>
+                                <div className="flex flex-col gap-2">
+                                    <div className="flex justify-between items-center border-b border-gray-50 pb-1">
+                                        <span className="text-[11px] text-gray-500 font-bold uppercase">Días de Trabajo</span>
+                                        <span className={`text-sm font-black ${annualStats.workDays > 202 ? 'text-green-600' : (annualStats.workDays < 202 ? 'text-red-600' : 'text-gray-800')}`}>
+                                            {annualStats.workDays}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between items-center border-b border-gray-50 pb-1">
+                                        <span className="text-[11px] text-gray-500 font-bold uppercase">Días de Descanso</span>
+                                        <span className="text-sm font-black text-blue-600">{annualStats.restDays}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-[11px] text-gray-500 font-bold uppercase">Vacaciones/PFA</span>
+                                        <span className="text-sm font-black text-orange-500">{annualStats.vacationDays}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Panel C: Periodos de 15 Días Interactivos */}
+                            {tipo === 'C' && (
+                                <div className="flex-1 p-4 bg-white flex flex-col min-h-0 border-b border-gray-100">
+                                    <div className="flex justify-between items-center mb-3 shrink-0">
+                                        <h4 className="font-bold text-gray-700 text-xs uppercase tracking-wider text-purple-700">Periodos Disponibles</h4>
+                                        <button onClick={() => setSelectedCycleC(null)} className="text-[10px] text-blue-600 hover:underline">Limpiar</button>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto space-y-2 custom-scroll pr-1">
+                                        {cyclesC.map((c, i) => {
+                                            const isSel = selectedCycleC?.id === c.id;
+                                            let cardClasses = "border transition-all flex flex-col relative ";
+                                            if (isSel) cardClasses += "bg-purple-50 border-purple-400 ring-1 ring-purple-400 shadow-sm"; 
+                                            else cardClasses += getStatusColor(c.availabilityLevel, false);
+
+                                            return (
+                                                <button
+                                                    key={c.id}
+                                                    disabled={c.isBlocked || c.isIncompatible}
+                                                    onClick={() => handleSelectPeriodC(c)}
+                                                    className={`w-full text-left p-2.5 rounded-lg ${cardClasses} ${c.isBlocked || c.isIncompatible ? 'cursor-not-allowed opacity-60' : 'hover:shadow-md hover:-translate-y-[1px]'}`}
+                                                >
+                                                    <div className="flex justify-between items-center mb-1">
+                                                        <span className={`text-[10px] font-black uppercase tracking-wider ${c.isBlocked ? 'text-gray-400 line-through' : (c.isIncompatible ? 'text-red-500' : 'opacity-80')}`}>
+                                                            {c.isBlocked ? 'AGOTADO' : (c.isIncompatible ? `INC (Solap: ${c.overlapCount})` : `PERIODO ${i + 1}`)}
+                                                        </span>
+                                                        
+                                                        {/* SUSTITUCIÓN DE % POR CUPO RESTANTE EXACTO */}
+                                                        {!c.isIncompatible && !c.isBlocked && (
+                                                            <span className="text-[10px] font-bold opacity-80">Cupo: {c.remainingCupo}</span>
+                                                        )}
+                                                        
+                                                        {c.isIncompatible && <span className="text-[10px]">⚠️</span>}
+                                                    </div>
+                                                    <span className={`text-[11px] font-bold block mb-1.5 ${c.isBlocked || c.isIncompatible ? 'text-gray-400' : 'opacity-90'}`}>
+                                                        {c.start.toLocaleDateString('es-ES', {day:'2-digit', month:'short'})} - {c.end.toLocaleDateString('es-ES', {day:'2-digit', month:'short'})}
+                                                    </span>
+                                                    {!c.isIncompatible && (
+                                                        <div className="w-full h-1 bg-white/50 rounded-full overflow-hidden border border-black/5">
+                                                            <div className={`h-full transition-all duration-300 ${getStatusColor(c.availabilityLevel, true)}`} style={{width: `${c.occupationPercent}%`}}></div>
+                                                        </div>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Acciones y Leyenda */}
+                            <div className="p-4 bg-gray-50 shrink-0">
+                                {tipo === 'A' && (
+                                    <>
+                                        {!isConfirmed ? (
+                                            <button onClick={() => setIsConfirmed(true)} disabled={selectedDays.length === 0} className={`w-full py-3 rounded-xl font-bold text-xs mb-3 shadow-md transition-all ${selectedDays.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+                                                CONFIRMAR SELECCIÓN
+                                            </button>
+                                        ) : (
+                                            <div className="bg-green-50 border border-green-200 p-3 rounded-xl text-center mb-3 shadow-sm">
+                                                <span className="text-green-700 font-bold text-xs">✅ ¡Solicitud Confirmada!</span>
+                                            </div>
+                                        )}
+                                        <button onClick={() => { setSelectedDays([]); setIsConfirmed(false); }} className="w-full py-2.5 border border-gray-300 rounded-xl font-bold text-[10px] uppercase text-gray-500 hover:bg-gray-100 transition-all bg-white shadow-sm">
+                                            RESETEAR SELECCIÓN
+                                        </button>
+                                    </>
+                                )}
+
+                                {tipo === 'B' && (
+                                    <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl text-center shadow-sm">
+                                        <span className="text-[10px] text-blue-700 font-bold leading-relaxed uppercase tracking-wide">
+                                            Modo Visualización.<br/>Secuencia calculada matemáticamente sin solapamientos.
+                                        </span>
+                                    </div>
+                                )}
+                                
+                                {tipo === 'C' && (
+                                    <div className="bg-purple-50 border border-purple-200 p-3 rounded-xl text-center shadow-sm">
+                                        <span className="text-[10px] text-purple-700 font-bold leading-relaxed uppercase tracking-wide">
+                                            Selección Automática.<br/>Elige tu periodo en la lista superior para confirmarlo.
+                                        </span>
+                                    </div>
+                                )}
+
+                                <div className="mt-4 pt-4 border-t border-gray-200">
+                                    <h5 className="font-bold text-gray-400 text-[9px] uppercase tracking-widest mb-2">Leyenda Visual</h5>
+                                    <div className="space-y-1.5 text-[10px] font-medium text-gray-600">
+                                        <div className="flex items-center gap-2"><div className="w-3 h-3 bg-[#fef9c3] border border-[#fde047] rounded-sm"></div> Descanso Base (Amarillo)</div>
+                                        {tipo === 'B' && <div className="flex items-center gap-2"><div className="w-3 h-3 bg-[#fee2e2] border border-[#f87171] rounded-sm"></div> Licencias (L-M, X, J-V)</div>}
+                                        
+                                        {tipo === 'A' && (
+                                            <>
+                                                <div className="flex items-center gap-2"><div className="w-3 h-3 bg-[#fef08a] border border-[#eab308] rounded-sm"></div> Crédito Seleccionado</div>
+                                                <div className="flex items-center gap-2"><div className="w-3 h-3 bg-[#dbeafe] border border-[#2563eb] rounded-sm"></div> Solicitud Confirmada</div>
+                                            </>
+                                        )}
+
+                                        {tipo === 'C' && (
+                                            <>
+                                                <div className="flex items-center gap-2"><div className="w-3 h-3 bg-[#e9d5ff] border border-[#a855f7] rounded-sm"></div> Periodo 15D Seleccionado</div>
+                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                    <span className="bg-[#dcfce7] border border-[#86efac] px-1 rounded text-[#15803d]">Alta</span>
+                                                    <span className="bg-[#ffedd5] border border-[#fdba74] px-1 rounded text-[#c2410c]">Media</span>
+                                                    <span className="bg-[#fee2e2] border border-[#fca5a5] px-1 rounded text-[#b91c1c]">Baja</span>
+                                                </div>
+                                            </>
+                                        )}
+
+                                        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200/50"><span className="text-orange-500 font-bold text-[12px]">☀️</span> Vacaciones (Bloqueado)</div>
+                                        <div className="flex items-center gap-2"><span className="text-blue-500 font-bold text-[12px]">❄️</span> PFA (Bloqueado)</div>
+                                        <div className="flex items-center gap-2"><span className="text-red-500 font-bold">15</span> Festivo o Fin de Semana</div>
+                                        
+                                        {tipo === 'A' && (
+                                            <>
+                                                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200/50"><div className="w-3 h-3 rounded-full bg-[#4ade80]"></div> Cupo Alto (>5)</div>
+                                                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#facc15]"></div> Cupo Bajo (1-5)</div>
+                                                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#ef4444]"></div> Agotado (0)</div>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ==========================================
+        // ROUTER / PANTALLA PRINCIPAL
+        // ==========================================
+        function AppRouter() {
+            const [view, setView] = useState('home');
+
+            if (view === 'calA') return <SimuladorEngine tipo="A" onBack={() => setView('home')} />;
+            if (view === 'calB') return <SimuladorEngine tipo="B" onBack={() => setView('home')} />;
+            if (view === 'calC') return <SimuladorEngine tipo="C" onBack={() => setView('home')} />;
+
+            // Home Page
+            return (
+                <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-6 w-full h-full">
+                    <div className="text-center mb-12">
+                        <h1 className="text-4xl font-extrabold text-blue-800 tracking-tight mb-3">Portal de Simuladores</h1>
+                        <p className="text-gray-500 text-lg">Selecciona el módulo de turnos y vacaciones al que deseas acceder.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl w-full px-4">
+                        
+                        {/* TARJETA A */}
+                        <div onClick={() => setView('calA')} className="bg-white rounded-2xl shadow-md hover:shadow-2xl transition-all duration-300 p-8 cursor-pointer border-t-8 border-blue-500 flex flex-col items-center text-center transform hover:-translate-y-2">
+                            <div className="text-6xl mb-6">📅</div>
+                            <h2 className="text-2xl font-bold text-gray-800 mb-3">Calendario A</h2>
+                            <p className="text-sm text-gray-500 flex-1">
+                                Simulador interactivo con selección de créditos (7+5), IA Poblacional y bloqueos de vacaciones.
+                            </p>
+                            <button className="mt-6 bg-blue-50 text-blue-700 font-bold py-2 px-6 rounded-full w-full border border-blue-200 hover:bg-blue-100 transition-colors">
+                                Acceder a Opción A
+                            </button>
+                        </div>
+
+                        {/* TARJETA B */}
+                        <div onClick={() => setView('calB')} className="bg-white rounded-2xl shadow-md hover:shadow-2xl transition-all duration-300 p-8 cursor-pointer border-t-8 border-green-500 flex flex-col items-center text-center transform hover:-translate-y-2">
+                            <div className="text-6xl mb-6">📊</div>
+                            <h2 className="text-2xl font-bold text-gray-800 mb-3">Calendario B</h2>
+                            <p className="text-sm text-gray-500 flex-1">
+                                Visualizador automático. Calcula la secuencia de licencias (L-M, X, J-V) sin solapamientos.
+                            </p>
+                            <button className="mt-6 bg-green-50 text-green-700 font-bold py-2 px-6 rounded-full w-full border border-green-200 hover:bg-green-100 transition-colors">
+                                Acceder a Opción B
+                            </button>
+                        </div>
+
+                        {/* TARJETA C */}
+                        <div onClick={() => setView('calC')} className="bg-white rounded-2xl shadow-md hover:shadow-2xl transition-all duration-300 p-8 cursor-pointer border-t-8 border-purple-500 flex flex-col items-center text-center transform hover:-translate-y-2">
+                            <div className="text-6xl mb-6">📈</div>
+                            <h2 className="text-2xl font-bold text-gray-800 mb-3">Calendario C</h2>
+                            <p className="text-sm text-gray-500 flex-1">
+                                Selección de bloques de 15 días. Vasos comunicantes con IA de simulación de cohortes.
+                            </p>
+                            <button className="mt-6 bg-purple-50 text-purple-700 font-bold py-2 px-6 rounded-full w-full border border-purple-200 hover:bg-purple-100 transition-colors">
+                                Acceder a Opción C
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<AppRouter />);
+    </script>
+</body>
+</html>
