@@ -2214,9 +2214,10 @@ function SimuladorRotacion({ globalMTE, config, onBack }) {
     const [selectedId, setSelectedId] = useState('A1');
     const [startPos, setStartPos] = useState(1);
     const [showHelp, setShowHelp] = useState(false);
-    const [showGeneralSequence, setShowGeneralSequence] = useState(false);
-    const [generalSequenceMode, setGeneralSequenceMode] = useState('unidad');
-    const [onceNumber, setOnceNumber] = useState('00000');
+	    const [showGeneralSequence, setShowGeneralSequence] = useState(false);
+	    const [generalSequenceMode, setGeneralSequenceMode] = useState('unidad');
+	    const [generalVisionMode, setGeneralVisionMode] = useState('unidad');
+	    const [onceNumber, setOnceNumber] = useState('00000');
     const [showRotationOrderPanel, setShowRotationOrderPanel] = useState(true);
     const [rotationSearchTerm, setRotationSearchTerm] = useState('');
     
@@ -2277,18 +2278,36 @@ function SimuladorRotacion({ globalMTE, config, onBack }) {
         if (exact) return exact;
         return filteredRotationOrder[0] || null;
     }, [generatedRotationOrder, filteredRotationOrder, normalizedRotationSearch]);
-    const searchedRotationSummary = useMemo(() => {
-        if (!searchedRotationRow) return null;
-        const ahead = Math.max(0, searchedRotationRow.order - 1);
-        const behind = Math.max(0, generatedRotationOrder.length - searchedRotationRow.order);
-        return {
+	    const searchedRotationSummary = useMemo(() => {
+	        if (!searchedRotationRow) return null;
+	        const ahead = Math.max(0, searchedRotationRow.order - 1);
+	        const behind = Math.max(0, generatedRotationOrder.length - searchedRotationRow.order);
+	        return {
             ...searchedRotationRow,
             ahead,
             behind
-        };
-    }, [searchedRotationRow, generatedRotationOrder.length]);
+	        };
+	    }, [searchedRotationRow, generatedRotationOrder.length]);
+	    const canUseSearchedVision = useMemo(() => {
+	        return !!(searchedRotationSummary?.unit && ALL_ROTATION_UNITS.includes(searchedRotationSummary.unit));
+	    }, [searchedRotationSummary]);
+	    const visionUnitId = useMemo(() => {
+	        if (generalVisionMode === 'dne' && canUseSearchedVision) return searchedRotationSummary.unit;
+	        return selectedId;
+	    }, [generalVisionMode, canUseSearchedVision, searchedRotationSummary, selectedId]);
+	    const visionScheme = useMemo(() => getGroupColor(visionUnitId.charAt(0)), [visionUnitId]);
+	    const visionBadgeLabel = useMemo(() => {
+	        if (generalVisionMode === 'dne' && canUseSearchedVision) return searchedRotationSummary.dne;
+	        return visionUnitId;
+	    }, [generalVisionMode, canUseSearchedVision, searchedRotationSummary, visionUnitId]);
+	    const visionHelperText = useMemo(() => {
+	        if (generalVisionMode === 'dne' && canUseSearchedVision) {
+	            return `Proyección automática para el DNE buscado, siguiendo su asignación actual en ${searchedRotationSummary.slotLabel}.`;
+	        }
+	        return 'Proyección automática de posición, subbloque, subsubbloque y MTE delante para la unidad seleccionada.';
+	    }, [generalVisionMode, canUseSearchedVision, searchedRotationSummary]);
 
-    const currentContent = getRotationBlockContent(currentStep);
+	    const currentContent = getRotationBlockContent(currentStep);
 
     useEffect(() => { let i; if (isPlaying) { i = setInterval(() => { setCurrentStep(p => p + 1); }, 2000); } return () => clearInterval(i); }, [isPlaying]);
     useEffect(() => { setCurrentStep(0); }, [startPos]);
@@ -2872,19 +2891,29 @@ th { background: #f3f4f6; text-align: center; }
 	                        </div>
 
 	                        <div className="bg-white/50 rounded-2xl p-4 md:p-5 border border-white/60 shadow-sm relative overflow-hidden w-full backdrop-blur-md mt-auto lg:mt-0">
-	                            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-3">
+		                            <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-3 mb-3">
 	                                <h3 className="text-xs font-black text-indigo-800 uppercase tracking-widest">👁️ Visión General ({config.proyeccionAnos || 15} años)</h3>
-	                                <span className={`font-black px-2 py-0.5 rounded text-[10px] ${activeScheme.p} text-white`}>{selectedId}</span>
+		                                <div className="flex flex-col items-start lg:items-end gap-2">
+		                                    <div className="flex flex-wrap gap-2">
+		                                        <button type="button" onClick={() => setGeneralVisionMode('unidad')} className={`toggle-btn ${generalVisionMode === 'unidad' ? 'toggle-on' : 'toggle-off'}`}>Unidad seleccionada</button>
+		                                        <button type="button" onClick={() => { if (canUseSearchedVision) setGeneralVisionMode('dne'); }} disabled={!canUseSearchedVision} className={`toggle-btn ${generalVisionMode === 'dne' && canUseSearchedVision ? 'toggle-on' : 'toggle-off'} ${!canUseSearchedVision ? 'opacity-50 cursor-not-allowed' : ''}`}>DNE buscado</button>
+		                                    </div>
+			                                <span className={`font-black px-2 py-0.5 rounded text-[10px] ${visionScheme.p} text-white rotation-wrap max-w-full`}>{visionBadgeLabel}</span>
+		                                </div>
                             </div>
                             <p className="text-[11px] text-gray-600 mb-4">Proyección automática de posición, subbloque, subsubbloque y MTE delante para la unidad seleccionada.</p>
-	                            <div className="rotation-vision-grid">
+	                            <div className="text-[11px] text-slate-700 font-bold mb-4 rotation-wrap">{visionHelperText}</div>
+	                            {!canUseSearchedVision && generalVisionMode === 'dne' && (
+		                                <div className="text-[10px] text-amber-700 font-bold mb-4">Busca un DNE valido para activar esa vista.</div>
+	                            )}
+		                            <div className="rotation-vision-grid">
                                 {Array.from({ length: config.proyeccionAnos || 15 }).map((_, stepOffset) => {
                                     const pos = sequence[stepOffset % 13];
                                     const contentForStep = getRotationBlockContent(stepOffset);
-                                    const flatOrder = contentForStep.flatMap(g => g.subs.map(num => `${g.label}${num}`));
-                                    const internalIdx = flatOrder.indexOf(selectedId);
-                                    const selectedGroupLabel = selectedId.charAt(0);
-                                    const selectedSubNum = parseInt(selectedId.slice(1), 10);
+	                                    const flatOrder = contentForStep.flatMap(g => g.subs.map(num => `${g.label}${num}`));
+	                                    const internalIdx = flatOrder.indexOf(visionUnitId);
+	                                    const selectedGroupLabel = visionUnitId.charAt(0);
+	                                    const selectedSubNum = parseInt(visionUnitId.slice(1), 10);
                                     const subBlockPos = contentForStep.findIndex(g => g.label === selectedGroupLabel) + 1;
                                     const selectedGroupData = subBlockPos > 0 ? contentForStep[subBlockPos - 1] : null;
                                     const subSubInGroupPos = selectedGroupData ? (selectedGroupData.subs.indexOf(selectedSubNum) + 1) : 0;
@@ -2893,17 +2922,17 @@ th { background: #f3f4f6; text-align: center; }
                                     const mPerSub = mPerBlock / 12;
                                     const mteDelanteStep = Math.round(((pos - 1) * mPerBlock) + (internalIdx * mPerSub) + (mPerSub / 2));
                                     return (
-	                                        <div key={stepOffset} className={`p-3 rounded-xl border-2 flex flex-col items-center justify-between min-h-[148px] relative overflow-hidden bg-white transition-transform cursor-default ${activeScheme.b}`}>
-                                            <div className={`absolute top-0 w-full h-1.5 ${activeScheme.p}`}></div>
+		                                        <div key={stepOffset} className={`p-3 rounded-xl border-2 flex flex-col items-center justify-between min-h-[148px] relative overflow-hidden bg-white transition-transform cursor-default ${visionScheme.b}`}>
+	                                            <div className={`absolute top-0 w-full h-1.5 ${visionScheme.p}`}></div>
                                             <span className="text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-widest mt-1">Año {stepOffset + 1}</span>
-                                            <span className={`text-sm md:text-base font-black mb-1 ${activeScheme.t}`}>Posición {pos}</span>
+	                                            <span className={`text-sm md:text-base font-black mb-1 ${visionScheme.t}`}>Posición {pos}</span>
                                             <div className="text-[8px] text-gray-600 font-bold mb-2 text-center leading-tight">
     <div>Subbloque {subBlockPos}/3</div>
     <div>Subsubbloque {subSubInGroupPos}/4 ({subSubGlobalPos}/12)</div>
 </div>
-                                            <div className={`rounded px-2 py-1 text-center w-full shadow-inner ${activeScheme.l}`}>
+	                                            <div className={`rounded px-2 py-1 text-center w-full shadow-inner ${visionScheme.l}`}>
                                                 <span className="block text-[8px] text-gray-500 uppercase font-black tracking-wider">MTE Delante</span>
-                                                <span className={`text-xs font-black ${activeScheme.t}`}>{mteDelanteStep}</span>
+	                                                <span className={`text-xs font-black ${visionScheme.t}`}>{mteDelanteStep}</span>
                                             </div>
                                         </div>
                                     );
