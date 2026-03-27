@@ -49,6 +49,11 @@
     .toggle-btn { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; }
     .toggle-on { background-color: #dcfce7; color: #166534; border-color: #86efac; }
     .toggle-off { background-color: rgba(243, 244, 246, 0.8); color: #6b7280; border-color: #e5e7eb; }
+    .custom-scroll { scrollbar-width: thin; scrollbar-color: rgba(100,116,139,0.75) rgba(226,232,240,0.7); scrollbar-gutter: stable; }
+    .custom-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+    .custom-scroll::-webkit-scrollbar-track { background: rgba(226,232,240,0.7); border-radius: 999px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: rgba(100,116,139,0.8); border-radius: 999px; border: 2px solid rgba(226,232,240,0.7); }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: rgba(71,85,105,0.9); }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     
@@ -551,10 +556,11 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
                 if (dneList.length === 0) throw new Error('empty');
                 setConfig(prev => normalizeAutoAMultipliers({
                     ...prev,
+                    globalMTE: dneList.length,
                     rotationDneList: dneList,
                     rotationDneFileName: file.name
                 }));
-                showStatus(`Excel cargado (${dneList.length} DNE)`);
+                showStatus(`Excel cargado (${dneList.length} DNE). Plantilla MTE ajustada a ${dneList.length}.`);
             } catch (_) {
                 showStatus('Error al leer Excel: usa una sola columna con un DNE por fila');
             }
@@ -703,7 +709,7 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
 	                        <h3 className="font-black text-slate-800 border-b border-slate-200 pb-2 mb-4 uppercase text-xs tracking-widest">📥 Sorteo Rotación</h3>
 	                        <div className="space-y-3">
 	                            <input id="rotationExcelInput" type="file" accept=".xlsx,.xls" className="hidden" onChange={handleRotationExcelImport} />
-	                            <p className="text-[11px] text-gray-600">Sube un Excel con <b>una sola columna</b> y <b>un DNE por fila</b>. Ese listado se usará luego para generar el orden de rotación con el número ONCE.</p>
+                            <p className="text-[11px] text-gray-600">Sube un Excel con <b>una sola columna</b> y <b>un DNE por fila</b>. Ese listado se usará luego para generar el orden de rotación con el número ONCE y <b>ajustará automáticamente la plantilla MTE total</b> al número de registros leídos.</p>
 	                            <div className="bg-white/80 border border-slate-200 rounded-xl p-3 space-y-2">
 	                                <div className="flex justify-between items-center">
 	                                    <span className="text-[10px] font-bold text-gray-600 uppercase">Fichero actual</span>
@@ -2227,6 +2233,11 @@ function SimuladorRotacion({ globalMTE, config, onBack }) {
         if (rotationTemplateSize <= 0) return 0;
         return Math.floor((normalizedOnceNumber * rotationTemplateSize) / 100000) + 1;
     }, [normalizedOnceNumber, rotationTemplateSize]);
+    const winningStartDne = useMemo(() => {
+        if (rotationDneList.length === 0 || winningStartPosition <= 0) return '';
+        const startIdx = Math.min(rotationDneList.length - 1, Math.max(0, winningStartPosition - 1));
+        return rotationDneList[startIdx] || '';
+    }, [rotationDneList, winningStartPosition]);
     const rotationAssignmentSlots = useMemo(() => buildRotationAssignmentSlots(rotationDneList.length, rotationUnitSequence), [rotationDneList.length, rotationUnitSequence]);
     const orderedRotationDneList = useMemo(() => {
         if (rotationDneList.length === 0 || winningStartPosition <= 0) return [];
@@ -2607,9 +2618,9 @@ th { background: #f3f4f6; text-align: center; }
                 </Modal>
             )}
 
-            <div className="flex flex-col lg:flex-row h-auto min-h-screen lg:h-screen w-full p-2 lg:p-3 gap-3 box-border bg-transparent">
-                <div className="w-full lg:w-72 flex flex-col panel shrink-0 order-1 lg:order-2 h-auto lg:h-full lg:overflow-hidden">
-                    <div className="flex-1 lg:overflow-y-auto custom-scroll flex flex-col">
+            <div className="flex flex-col lg:flex-row min-h-screen lg:h-[calc(100vh-0.75rem)] w-full p-2 lg:p-3 gap-3 box-border bg-transparent lg:overflow-hidden">
+                <div className="w-full lg:w-72 flex flex-col panel shrink-0 order-1 lg:order-2 min-h-0 max-h-[42vh] lg:max-h-none lg:h-full overflow-hidden">
+                    <div className="flex-1 min-h-0 overflow-y-auto custom-scroll flex flex-col pr-1">
                         <div className="p-5 border-b border-gray-100/50 bg-gray-50/30 shrink-0">
 	                            <h4 className="font-bold text-gray-800 text-sm mb-4 uppercase tracking-wider">Configuración</h4>
 	                            <div className="space-y-4">
@@ -2629,18 +2640,27 @@ th { background: #f3f4f6; text-align: center; }
 	                                        <span className="text-[10px] text-gray-600 font-bold uppercase">Plantilla usada</span>
 	                                        <span className="text-[11px] font-black text-blue-700">{rotationTemplateSize}</span>
 	                                    </div>
-	                                    <div className="flex justify-between items-center">
-	                                        <span className="text-[10px] text-gray-600 font-bold uppercase">Primer MTE del sorteo</span>
-	                                        <span className="text-[11px] font-black text-emerald-700">{winningStartPosition || '-'}</span>
-	                                    </div>
-	                                    <div className="text-[10px] text-gray-500 leading-tight">
-	                                        Formula aplicada: <b>({formattedOnceNumber} x {rotationTemplateSize} / 100000) + 1</b>
-	                                    </div>
-	                                    {rotationDneList.length > 0 && rotationDneList.length !== Number(globalMTE) && (
-	                                        <div className="text-[10px] text-amber-700 font-bold leading-tight">
-	                                            Aviso: el Excel tiene {rotationDneList.length} DNE y la plantilla MTE es {globalMTE}. Para el orden se usa la plantilla cargada en el Excel.
-	                                        </div>
-	                                    )}
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-[10px] text-gray-600 font-bold uppercase">Primer MTE del sorteo</span>
+                                        <span className="text-[11px] font-black text-emerald-700">{winningStartPosition || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center gap-3">
+                                        <span className="text-[10px] text-gray-600 font-bold uppercase">DNE correspondiente</span>
+                                        <span className="text-[11px] font-black text-emerald-700 text-right break-all">{winningStartDne || '-'}</span>
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 leading-tight">
+                                        Formula aplicada: <b>({formattedOnceNumber} x {rotationTemplateSize} / 100000) + 1</b>
+                                    </div>
+                                    {!!winningStartDne && (
+                                        <div className="text-[10px] text-emerald-700 font-bold leading-tight">
+                                            El primer MTE calculado apunta al DNE <b>{winningStartDne}</b> del listado Excel.
+                                        </div>
+                                    )}
+                                    {rotationDneList.length > 0 && rotationDneList.length !== Number(globalMTE) && (
+                                        <div className="text-[10px] text-amber-700 font-bold leading-tight">
+                                            Aviso: el Excel tiene {rotationDneList.length} DNE y la plantilla MTE es {globalMTE}. Para el orden se usa la plantilla cargada en el Excel.
+                                        </div>
+                                    )}
 	                                    {rotationDneList.length === 0 && (
 	                                        <div className="text-[10px] text-rose-700 font-bold leading-tight">
 	                                            Sube antes el Excel de DNE en Configurar para generar el orden.
@@ -2673,9 +2693,9 @@ th { background: #f3f4f6; text-align: center; }
                     </div>
                 </div>
 
-                <div className="flex-1 flex flex-col min-w-0 panel overflow-hidden bg-white/10 order-2 lg:order-1 h-auto lg:h-full">
-                    <div className="px-5 py-4 border-b border-gray-100/50 flex items-center justify-between shrink-0 bg-white/40">
-                        <div className="flex items-center gap-3">
+	                <div className="flex-1 flex flex-col min-w-0 min-h-0 panel overflow-hidden bg-white/10 order-2 lg:order-1 lg:h-full">
+	                    <div className="px-4 md:px-5 py-4 border-b border-gray-100/50 flex flex-wrap items-center justify-between gap-3 shrink-0 bg-white/40">
+	                        <div className="flex flex-wrap items-center gap-3 min-w-0">
                             <button onClick={onBack} className="p-1.5 text-gray-500 hover:text-blue-700 hover:bg-blue-100/50 rounded-full transition-colors"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg></button>
                             <div className="logo-img h-6 w-6 hidden sm:block mr-1"></div>
                             <h1 className="text-xl font-black text-[#2563eb] leading-none m-0 drop-shadow-sm">Módulo <span className="text-gray-800">Rotación</span></h1>
@@ -2684,7 +2704,7 @@ th { background: #f3f4f6; text-align: center; }
                         </div>
                     </div>
 
-                    <div className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto custom-scroll flex flex-col gap-6 lg:gap-8 bg-transparent">
+	                    <div className="flex-1 min-h-0 p-4 md:p-6 lg:p-8 overflow-y-auto custom-scroll flex flex-col gap-6 lg:gap-8 bg-transparent">
                         <div className="bg-white/50 rounded-2xl p-4 md:p-5 border border-white/60 shadow-sm relative backdrop-blur-md">
                             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 md:mb-6">
                                 <h2 className="text-xs font-bold text-gray-600 uppercase tracking-widest flex items-center gap-2"><span className={`w-2 h-2 ${activeScheme.p} rounded-full`}></span> Tablero Anual</h2>
@@ -2693,7 +2713,7 @@ th { background: #f3f4f6; text-align: center; }
                                     <div className="flex items-center gap-1.5"><div className={`w-3 h-3 ${activeScheme.indicatorBg} rounded border border-white/50 ring-1 ${activeScheme.r}`}></div> {selectedId}</div>
                                 </div>
                             </div>
-                            <div className="overflow-x-auto w-full pb-2 no-scrollbar">
+	                            <div className="overflow-x-auto overflow-y-hidden w-full pb-2 custom-scroll">
                                 <div className="min-w-[450px] grid grid-cols-13 gap-1 md:gap-2 items-end min-h-[120px] md:min-h-[140px]">
                                     {[...Array(13)].map((_, i) => {
                                         const pos = i + 1; const active = activePosition === pos;
@@ -2747,7 +2767,7 @@ th { background: #f3f4f6; text-align: center; }
 	                                    {showRotationOrderPanel ? 'Plegar' : 'Desplegar'}
 	                                </button>
 	                            </div>
-	                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+		                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
 	                                <div className="bg-white/70 rounded-xl border border-gray-200 p-3">
 	                                    <div className="text-[9px] font-black text-gray-500 uppercase">Fichero DNE</div>
 	                                    <div className="text-[11px] font-black text-slate-800 mt-1">{config.rotationDneFileName || 'Sin cargar'}</div>
@@ -2801,9 +2821,9 @@ th { background: #f3f4f6; text-align: center; }
 	                                            )}
 	                                        </div>
 	                                    </div>
-	                                    <div className="overflow-auto rounded-xl border border-gray-200 bg-white/60 max-h-[28rem]">
-	                                    <table className="w-full text-left text-[11px] border-collapse min-w-[760px]">
-	                                        <thead className="bg-gray-100 text-gray-600 uppercase">
+		                                    <div className="overflow-auto custom-scroll rounded-xl border border-gray-200 bg-white/60 max-h-[65vh]">
+		                                    <table className="w-full text-left text-[11px] border-collapse min-w-[760px]">
+		                                        <thead className="bg-gray-100 text-gray-600 uppercase sticky top-0 z-10">
 	                                            <tr>
 	                                                <th className="p-2">Orden</th>
 	                                                <th className="p-2">DNE</th>
