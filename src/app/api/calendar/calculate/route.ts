@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { IApiResponse, ICalendarCalculationRequest, ICalendarCalculationResponse } from '@/lib/types/simulator'
+import { IApiResponse, ICalendarCalculationRequest } from '@/lib/types/simulator'
 import { validateConfig } from '@/lib/utils/validation'
 import { calculateDayCategory, calculatePressureLevel, getMonthlyQuotas, createDayEntry } from '@/lib/utils/calendar'
 import { getDaysInRange } from '@/lib/utils/helpers'
