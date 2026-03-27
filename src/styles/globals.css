@@ -14,11 +14,11 @@
 
   input[type='number']::-webkit-outer-spin-button,
   input[type='number']::-webkit-inner-spin-button {
-    @apply appearance-none margin-0;
+    @apply appearance-none m-0;
   }
 
   input[type='number'] {
-    @apply moz-appearance-textfield;
+    -moz-appearance: textfield;
   }
 }
 
