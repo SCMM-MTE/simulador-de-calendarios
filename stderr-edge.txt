@@ -1,0 +1,3 @@
+[24464:23640:0327/204852.337:ERROR:components\os_crypt\sync\os_crypt_win.cc:130] Failed to decrypt: Clave no válida para utilizar en el estado especificado. (0x8009000B)
+[24464:23640:0327/204852.380:ERROR:components\edge_ess\vbs_encoder.cc:100] LoadEnclaveImageW failed, error code 577
+[24464:23640:0327/204853.275:ERROR:chrome\browser\task_manager\providers\fallback_task_provider.cc:126] Every renderer should have at least one task provided by a primary task provider. If a "Renderer" fallback task is shown, it is a bug. If you have repro steps, please file a new bug and tag it as a dependency of crbug.com/40528867.

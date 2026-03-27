@@ -1,0 +1,4 @@
+[0327/204734.887:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: Acceso denegado. (0x5)
+[3080:6800:0327/204735.088:ERROR:net\base\network_change_notifier_win.cc:263] WSALookupServiceBegin failed with: -1
+[3080:7144:0327/204735.101:FATAL:mojo\public\cpp\platform\platform_channel.cc:170] Check failed: . : Acceso denegado. (0x5)
+[0327/204735.102:ERROR:third_party\crashpad\crashpad\client\crashpad_client_win.cc:154] crash server failed to launch

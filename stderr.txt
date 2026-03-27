@@ -1,0 +1,27 @@
+[0327/204717.275:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: Acceso denegado. (0x5)
+[29616:26848:0327/204717.305:VERBOSE1:components\policy\core\common\edge_admin_center\eac_policy_manager.cc:30] EACPolicyManager::Create C:\Users\RBB\AppData\Local\Temp\HeadlessEdge296168690953 1
+[29616:26848:0327/204717.305:VERBOSE1:components\policy\core\common\edge_admin_center\eac_policy_store.cc:152] EACPolicyStore load from disk failed: no policy file exists at C:\Users\RBB\AppData\Local\Temp\HeadlessEdge296168690953\Policy\Machine Policy
+[29616:26848:0327/204717.306:VERBOSE1:components\policy\core\common\edge_admin_center\eac_policy_store.cc:233] EACPolicyStore policy loaded: result.status=EACPolicyLoadStatusForUma(1), scope=TOKEN
+[29616:26848:0327/204717.306:VERBOSE1:components\policy\core\common\edge_admin_center\eac_policy_store.cc:243] EACPolicyStore policy load failed: No policy found on disk, scope=TOKEN
+[29616:26848:0327/204717.306:VERBOSE1:components\policy\core\common\edge_admin_center\eac_policy_manager.cc:30] EACPolicyManager::Create C:\Users\RBB\AppData\Local\Temp\HeadlessEdge296168690953 1
+[29616:26848:0327/204717.306:VERBOSE1:components\policy\core\common\edge_admin_center\eac_policy_store.cc:152] EACPolicyStore load from disk failed: no policy file exists at C:\Users\RBB\AppData\Local\Temp\HeadlessEdge296168690953\Policy\Profile Machine Policy
+[29616:26848:0327/204717.306:VERBOSE1:components\policy\core\common\edge_admin_center\eac_policy_store.cc:233] EACPolicyStore policy loaded: result.status=EACPolicyLoadStatusForUma(1), scope=PROFILE_MACHINE
+[29616:26848:0327/204717.307:VERBOSE1:components\policy\core\common\edge_admin_center\eac_policy_store.cc:243] EACPolicyStore policy load failed: No policy found on disk, scope=PROFILE_MACHINE
+[29616:26848:0327/204717.307:VERBOSE1:components\policy\core\common\edge_admin_center\eac_policy_manager.cc:60] EACPolicyManager initializing, scope=TOKEN 0x1c0000c4400
+[29616:26848:0327/204717.307:VERBOSE1:components\policy\core\common\edge_admin_center\eac_policy_manager.cc:169] EACPolicyManager store loaded, scope=TOKEN
+[29616:26848:0327/204717.307:VERBOSE1:components\policy\core\common\edge_admin_center\eac_policy_manager.cc:117] EACPolicyManager publishing policies, scope=TOKEN 0x1c0000c4400
+[29616:26848:0327/204717.307:VERBOSE1:components\policy\core\common\edge_admin_center\eac_policy_manager.cc:60] EACPolicyManager initializing, scope=PROFILE_MACHINE 0x1c0000c4500
+[29616:26848:0327/204717.307:VERBOSE1:components\policy\core\common\edge_admin_center\eac_policy_manager.cc:169] EACPolicyManager store loaded, scope=PROFILE_MACHINE
+[29616:26848:0327/204717.307:VERBOSE1:components\policy\core\common\edge_admin_center\eac_policy_manager.cc:117] EACPolicyManager publishing policies, scope=PROFILE_MACHINE 0x1c0000c4500
+[29616:26848:0327/204717.309:VERBOSE1:components\variations\service\variations_field_trial_creator.cc:94] VariationsSeedUsage:2
+[29616:26848:0327/204717.309:VERBOSE1:components\variations\service\variations_field_trial_creator.cc:539] VariationsSetupComplete
+[29616:26848:0327/204717.492:ERROR:net\base\network_change_notifier_win.cc:263] WSALookupServiceBegin failed with: -1
+[29616:26848:0327/204717.498:VERBOSE1:chrome\browser\media\webrtc\webrtc_event_log_manager.cc:122] WebRTC remote-bound event logging enabled.
+[29616:26848:0327/204717.498:VERBOSE1:components\proxy_config\pref_proxy_config_tracker_impl.cc:460] 0x1c4000c1500: set chrome proxy config service to 0x1c4000c8a00
+[29616:26848:0327/204717.499:VERBOSE1:components\device_event_log\device_event_log_impl.cc:250] [20:47:17.500] Display: EVENT: screen_win.cc:1310 Displays updated, count: 1
+[29616:26848:0327/204717.500:VERBOSE1:components\device_event_log\device_event_log_impl.cc:250] [20:47:17.500] Display: EVENT: screen_win.cc:1312 Display[1] bounds=[0,0 800x600], workarea=[0,0 800x600], scale=1, rotation=0, panel_rotation=0 external detected
+[29616:19912:0327/204717.501:VERBOSE1:content\browser\renderer_host\media\media_stream_manager.cc:1525] MSM::InitializeMaybeAsync([this=0x1c4001120c0])
+[29616:13756:0327/204717.501:FATAL:mojo\public\cpp\platform\platform_channel.cc:170] Check failed: . : Acceso denegado. (0x5)
+[29616:19912:0327/204717.502:VERBOSE1:content\browser\renderer_host\media\media_stream_manager.cc:1525] MDM::MediaDevicesManager()
+[0327/204717.502:ERROR:third_party\crashpad\crashpad\client\crashpad_client_win.cc:154] crash server failed to launch
+[29616:19912:0327/204717.502:VERBOSE1:content\browser\renderer_host\media\media_stream_manager.cc:1525] MSM::MediaStreamManager([this=0x1c4001120c0]))
