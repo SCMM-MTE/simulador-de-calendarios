@@ -12,7 +12,7 @@ import { IApiResponse } from '@/lib/types/simulator'
  * GET /api/config
  * Retorna la configuración actual (desde localStorage fallback)
  */
-export async function GET(request: NextRequest): Promise<NextResponse> {
+export async function GET(): Promise<NextResponse> {
   try {
     // Por ahora, retornar configuración por defecto
     // En futuro, esto obtenría de DB
