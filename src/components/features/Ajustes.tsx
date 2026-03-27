@@ -2,7 +2,6 @@
 
 import { useRef, useState } from 'react';
 import { useConfigStore } from '@/store/configStore';
-import { DEFAULT_CONFIG, STORAGE_KEYS } from '@/lib/constants/defaults';
 import { MESES, AUTO_A_PROFILE_SEGMENTS } from '@/lib/constants/seasons';
 import { ROTATION_UNITS } from '@/lib/constants/rotations';
 import { validateConfig } from '@/lib/utils/validation';
