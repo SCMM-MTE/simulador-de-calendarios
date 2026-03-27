@@ -26,7 +26,7 @@ export function Ajustes() {
   const [rotationUnitSequence, setRotationUnitSequence] = useState(
     (config.rotationUnitSequence || []).length > 0
       ? config.rotationUnitSequence
-      : ROTATION_UNITS.map(u => u.id)
+      : [...ROTATION_UNITS]
   );
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
