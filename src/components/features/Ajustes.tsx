@@ -103,7 +103,7 @@ export function Ajustes() {
   };
 
   const resetRotationUnitSequence = () => {
-    const defaultSequence = ROTATION_UNITS.map(u => u.id);
+    const defaultSequence = [...ROTATION_UNITS];
     setRotationUnitSequence(defaultSequence);
     updateConfigField('rotationUnitSequence', defaultSequence);
   };
@@ -111,7 +111,7 @@ export function Ajustes() {
   const applyAutoProfileDefaults = () => {
     const defaultProfile: { [key: string]: number } = {};
     AUTO_A_PROFILE_SEGMENTS.forEach(seg => {
-      defaultProfile[seg.configKey] = seg.defaultWeight;
+      defaultProfile[seg.key] = 1.0;
     });
     
     const updatedConfig = { ...config, ...defaultProfile };
@@ -482,20 +482,20 @@ export function Ajustes() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   {AUTO_A_PROFILE_SEGMENTS.map(segment => (
-                    <div key={segment.configKey} className="border border-gray-200 rounded p-3 bg-white">
+                    <div key={segment.key} className="border border-gray-200 rounded p-3 bg-white">
                       <label className="text-xs font-bold text-gray-700 block mb-2 uppercase leading-tight">
-                        {segment.name}
+                        {segment.label}
                       </label>
-                      <p className="text-xs text-gray-500 mb-2">{segment.months}</p>
+                      <p className="text-xs text-gray-500 mb-2">{segment.months.map((m: number) => MESES[m]).join(', ')}</p>
                       <input
                         type="number"
                         step="0.1"
                         min="0"
                         max="10"
                         className="w-full px-2 py-1 border border-gray-300 rounded text-center font-bold"
-                        value={config[segment.configKey as keyof IConfig] as number}
+                        value={config[segment.key as keyof IConfig] as number || 1.0}
                         onChange={e =>
-                          handleChange(segment.configKey as keyof IConfig, parseFloat(e.target.value) || 0)
+                          handleChange(segment.key as keyof IConfig, parseFloat(e.target.value) || 0)
                         }
                       />
                     </div>
