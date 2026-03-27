@@ -14,12 +14,12 @@ type TabType = 'ajustes' | 'cal-a' | 'cal-b' | 'cal-c' | 'rotacion' | 'analisis'
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>('ajustes');
-  const { loadFromStorage } = useConfigStore();
+  const { loadConfigFromStorage } = useConfigStore();
 
   // Load config from storage on mount
   useEffect(() => {
-    loadFromStorage();
-  }, [loadFromStorage]);
+    loadConfigFromStorage();
+  }, [loadConfigFromStorage]);
 
   const tabs: { id: TabType; label: string; icon: string }[] = [
     { id: 'ajustes', label: 'Ajustes', icon: '⚙️' },
