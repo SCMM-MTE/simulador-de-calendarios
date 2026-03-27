@@ -2228,9 +2228,13 @@ function SimuladorRotacion({ globalMTE, config, onBack }) {
 	        const parsed = parseInt(String(selectedId || '').slice(1), 10);
 	        return Number.isFinite(parsed) && parsed >= 1 && parsed <= 4 ? parsed : 1;
 	    }, [selectedId]);
+	    const projectionYears = useMemo(() => {
+	        const parsed = parseInt(String(config?.proyeccionAnos ?? ''), 10);
+	        return Number.isFinite(parsed) && parsed > 0 ? parsed : 15;
+	    }, [config?.proyeccionAnos]);
 	    const sequence = useMemo(() => buildRotationSequence(startPos), [startPos]);
 	    const activePosition = sequence[currentStep % 13];
-	    const maxConfigYear = useMemo(() => Math.max(13, Number(config?.proyeccionAnos) || 15), [config]);
+	    const maxConfigYear = useMemo(() => Math.max(13, projectionYears), [projectionYears]);
 	    const rotationDneList = useMemo(() => (Array.isArray(config?.rotationDneList) ? config.rotationDneList.filter(Boolean) : []), [config]);
     const rotationTemplateSize = useMemo(() => {
         const loaded = rotationDneList.length;
@@ -2911,7 +2915,7 @@ th { background: #f3f4f6; text-align: center; }
 
 	                        <div className="bg-white/50 rounded-2xl p-4 md:p-5 border border-white/60 shadow-sm relative overflow-hidden w-full backdrop-blur-md mt-auto lg:mt-0">
 		                            <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-3 mb-3">
-	                                <h3 className="text-xs font-black text-indigo-800 uppercase tracking-widest">👁️ Visión General ({config.proyeccionAnos || 15} años)</h3>
+	                                <h3 className="text-xs font-black text-indigo-800 uppercase tracking-widest">👁️ Visión General ({projectionYears} años)</h3>
 		                                <div className="flex flex-col items-start lg:items-end gap-2">
 		                                    <div className="flex flex-wrap gap-2">
 		                                        <button type="button" onClick={() => setGeneralVisionMode('unidad')} className={`toggle-btn ${generalVisionMode === 'unidad' ? 'toggle-on' : 'toggle-off'}`}>Unidad seleccionada</button>
@@ -2926,7 +2930,7 @@ th { background: #f3f4f6; text-align: center; }
 		                                <div className="text-[10px] text-amber-700 font-bold mb-4">Busca un DNE valido para activar esa vista.</div>
 	                            )}
 		                            <div className="rotation-vision-grid">
-                                {Array.from({ length: config.proyeccionAnos || 15 }).map((_, stepOffset) => {
+	                                {Array.from({ length: projectionYears }).map((_, stepOffset) => {
                                     const pos = sequence[stepOffset % 13];
                                     const contentForStep = getRotationBlockContent(stepOffset);
 	                                    const flatOrder = contentForStep.flatMap(g => g.subs.map(num => `${g.label}${num}`));
