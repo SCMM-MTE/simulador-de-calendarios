@@ -207,6 +207,27 @@ const getRotationBlockBreakdown = (totalMte, configuredBlockSize) => {
         autoBloque: autoBlockSize
     };
 };
+const extractRotationDneListFromWorkbookData = (arrayBuffer) => {
+    if (typeof XLSX === 'undefined') throw new Error('xlsx');
+    const data = new Uint8Array(arrayBuffer);
+    const workbook = XLSX.read(data, { type: 'array' });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) throw new Error('sheet');
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
+    const dneList = rows
+        .map(row => Array.isArray(row) ? String(row[0] ?? '').trim() : '')
+        .filter(Boolean);
+    if (dneList.length === 0) throw new Error('empty');
+    return dneList;
+};
+const applyRotationTemplateToConfig = (prevConfig, dneList, fileName = 'mtes.xlsx') => normalizeAutoAMultipliers({
+    ...prevConfig,
+    globalMTE: dneList.length,
+    rotationBlockSize: Math.round(dneList.length / 13),
+    rotationDneList: dneList,
+    rotationDneFileName: fileName
+});
 const buildRotationAssignmentSlots = (totalMte, unitSequence = DEFAULT_ROTATION_ASSIGNMENT_UNIT_SEQUENCE) => {
     const normalizedTotal = Math.max(0, Number(totalMte) || 0);
     const slots = [];
@@ -587,23 +608,8 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
         const reader = new FileReader();
         reader.onload = () => {
             try {
-                const data = new Uint8Array(reader.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const sheetName = workbook.SheetNames[0];
-                if (!sheetName) throw new Error('sheet');
-                const sheet = workbook.Sheets[sheetName];
-                const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
-                const dneList = rows
-                    .map(row => Array.isArray(row) ? String(row[0] ?? '').trim() : '')
-                    .filter(Boolean);
-                if (dneList.length === 0) throw new Error('empty');
-                setConfig(prev => normalizeAutoAMultipliers({
-                    ...prev,
-                    globalMTE: dneList.length,
-                    rotationBlockSize: Math.round(dneList.length / 13),
-                    rotationDneList: dneList,
-                    rotationDneFileName: file.name
-                }));
+                const dneList = extractRotationDneListFromWorkbookData(reader.result);
+                setConfig(prev => applyRotationTemplateToConfig(prev, dneList, file.name));
                 showStatus(`Excel cargado (${dneList.length} DNE). Plantilla MTE ajustada a ${dneList.length}.`);
             } catch (_) {
                 showStatus('Error al leer Excel: usa una sola columna con un DNE por fila');
@@ -718,57 +724,87 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
 	                </Modal>
 	            )}
 
-            <div className="panel p-4 flex justify-between items-center mb-6 shrink-0 bg-white/70 backdrop-blur-xl">
-                <div className="flex items-center gap-3">
-                    <button onClick={onBack} className="p-2 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-full transition-colors"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg></button>
-                    <h1 className="text-2xl font-black text-blue-900 flex items-center gap-2">⚙️ Ajustes del Motor de Simulación</h1>
-                </div>
-                <div className="flex items-center gap-2">
-                    {saveStatus && <span className={`text-[11px] font-bold ${saveStatus.includes('Error') ? 'text-red-700' : 'text-green-700'}`}>{saveStatus}</span>}
-                    <input id="importConfigTxt" type="file" accept=".txt,.json,text/plain,application/json" className="hidden" onChange={handleImportTxt} />
-                    <button onClick={handleExportTxt} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors">⬇️ Exportar Ajustes</button>
-                    <button onClick={() => document.getElementById('importConfigTxt').click()} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors">⬆️ Importar Ajustes</button>
-                    <button onClick={handleSave} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors">💾 Guardar</button>
-                    <button onClick={() => setShowHelp(true)} className="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white rounded-xl text-xs font-bold shadow-md">❓ Ayuda</button>
+            <div className="panel p-4 md:p-5 flex flex-col gap-4 mb-6 shrink-0 bg-white/70 backdrop-blur-xl">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <button onClick={onBack} className="p-2 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-full transition-colors shrink-0"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg></button>
+                        <h1 className="text-xl md:text-2xl font-black text-blue-900 leading-tight">Ajustes del Motor de Simulaci&oacute;n</h1>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {saveStatus && <span className={`text-[11px] font-bold px-2 py-1 rounded-lg ${saveStatus.includes('Error') ? 'text-red-700 bg-red-50 border border-red-200' : 'text-green-700 bg-green-50 border border-green-200'}`}>{saveStatus}</span>}
+                        <input id="importConfigTxt" type="file" accept=".txt,.json,text/plain,application/json" className="hidden" onChange={handleImportTxt} />
+                        <button onClick={handleExportTxt} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors">Exportar ajustes</button>
+                        <button onClick={() => document.getElementById('importConfigTxt').click()} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors">Importar ajustes</button>
+                        <button onClick={handleSave} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors">Guardar</button>
+                        <button onClick={() => setShowHelp(true)} className="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white rounded-xl text-xs font-bold shadow-md">Ayuda</button>
+                    </div>
                 </div>
             </div>
             
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-y-auto pb-10">
+            <div className="panel p-5 bg-white/60 border-slate-200 mb-6">
+                <div className="flex flex-col gap-4 mb-4">
+                    <div>
+                        <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest">Resumen r&aacute;pido</h3>
+                        <p className="text-[11px] text-slate-600 mt-1">Acceso directo a los valores que m&aacute;s condicionan el comportamiento global.</p>
+                    </div>
+                    <button onClick={handleSave} className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-[10px] font-bold shadow-sm transition-colors self-start">Guardar ahora</button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                        <div className="text-[9px] font-bold text-blue-800 uppercase">Plantilla MTE</div>
+                        <div className="text-2xl font-black text-blue-900 mt-1">{config.globalMTE}</div>
+                    </div>
+                    <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3">
+                        <div className="text-[9px] font-bold text-indigo-800 uppercase">Bloque rotaci&oacute;n</div>
+                        <div className="text-2xl font-black text-indigo-900 mt-1">{config.rotationBlockSize ?? rotationBlockBreakdown.autoBloque}</div>
+                    </div>
+                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-3">
+                        <div className="text-[9px] font-bold text-purple-800 uppercase">Cr&eacute;ditos auto A</div>
+                        <div className="text-2xl font-black text-purple-900 mt-1">{config.creditosAutoA ?? DEFAULT_FLEX_DAYS_A}</div>
+                    </div>
+                    <div className="bg-teal-50 border border-teal-200 rounded-xl p-3">
+                        <div className="text-[9px] font-bold text-teal-800 uppercase">A&ntilde;os rotaci&oacute;n</div>
+                        <div className="text-2xl font-black text-teal-900 mt-1">{config.proyeccionAnos}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-6 pb-10">
                 <div className="flex flex-col gap-6">
 	                    <div className="panel p-5 bg-white/60 border-gray-200">
-	                        <h3 className="font-black text-blue-800 border-b border-blue-200 pb-2 mb-4 uppercase text-xs tracking-widest">👥 Datos Generales</h3>
+	                        <h3 className="font-black text-blue-800 border-b border-blue-200 pb-2 mb-4 uppercase text-xs tracking-widest">Datos generales</h3>
 		                            <div className="space-y-4">
                             <div><label className="text-[10px] font-bold text-gray-600 block mb-1">PLANTILLA MTE TOTAL</label><input type="number" className="custom-select font-black text-blue-700 text-lg py-2" value={config.globalMTE} onChange={e => handleChange('globalMTE', e.target.value)} /></div>
                             <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-200">
                                 <div className="flex items-center justify-between gap-2 mb-2">
-                                    <label className="text-[10px] font-bold text-indigo-800 block">TAMAÑO BLOQUE ROTACIÓN</label>
+	                                    <label className="text-[10px] font-bold text-indigo-800 block">TAMA&Ntilde;O BLOQUE ROTACI&Oacute;N</label>
                                     <button onClick={() => handleChange('rotationBlockSize', rotationBlockBreakdown.autoBloque)} className="px-2 py-1 bg-white text-indigo-700 border border-indigo-300 rounded-lg text-[10px] font-bold hover:bg-indigo-100 transition-colors">Auto</button>
                                 </div>
 	                                <input type="number" min="0" step="1" className="custom-select font-black text-indigo-700 text-lg py-2" value={config.rotationBlockSize ?? rotationBlockBreakdown.autoBloque} onChange={e => setConfig(prev => normalizeAutoAMultipliers({ ...prev, rotationBlockSize: Math.max(0, Math.round(Number(e.target.value) || 0)) }))} />
-	                                <p className="text-[9px] text-indigo-700 mt-2 leading-tight">Pon <b>0</b> para cálculo automático por plantilla ({rotationBlockBreakdown.autoBloque}). Reparto entero actual: <b>{rotationBlockBreakdown.subbloque}</b> por subbloque y <b>{rotationBlockBreakdown.subsubbloque}</b> por unidad.</p>
+	                                <p className="text-[9px] text-indigo-700 mt-2 leading-tight">Pon <b>0</b> para c&aacute;lculo autom&aacute;tico por plantilla ({rotationBlockBreakdown.autoBloque}). Reparto entero actual: <b>{rotationBlockBreakdown.subbloque}</b> por subbloque y <b>{rotationBlockBreakdown.subsubbloque}</b> por unidad.</p>
                             </div>
                             <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
                                 <label className="text-[10px] font-bold text-purple-800 block mb-1">CAPACIDAD DE REFERENCIA (Por Grupo)</label>
                                 <div className="text-xl font-black text-purple-900">{Math.max(1, Math.round((config.globalMTE || 2100) / 52))} plazas</div>
-                                <p className="text-[9px] text-purple-600 mt-1 leading-tight">Fórmula Automática: MTE / 4 Grupos / 13 Periodos</p>
+	                                <p className="text-[9px] text-purple-600 mt-1 leading-tight">F&oacute;rmula autom&aacute;tica: MTE / 4 Grupos / 13 Periodos</p>
                             </div>
-                            <div><label className="text-[10px] font-bold text-gray-600 block mb-1">MÁX. SOLAPAMIENTO PERMITIDO (Días)</label><input type="number" className="custom-select" value={config.maxSolapamiento} onChange={e => handleChange('maxSolapamiento', e.target.value)} /></div>
-                            <div><label className="text-[10px] font-bold text-gray-600 block mb-1">CRÉDITOS AUTO POR MTE (CAL. A)</label><input type="number" min="0" step="1" className="custom-select" value={config.creditosAutoA ?? DEFAULT_FLEX_DAYS_A} onChange={e => handleChange('creditosAutoA', e.target.value)} /></div>
+	                            <div><label className="text-[10px] font-bold text-gray-600 block mb-1">M&Aacute;X. SOLAPAMIENTO PERMITIDO (D&iacute;as)</label><input type="number" className="custom-select" value={config.maxSolapamiento} onChange={e => handleChange('maxSolapamiento', e.target.value)} /></div>
+	                            <div><label className="text-[10px] font-bold text-gray-600 block mb-1">CR&Eacute;DITOS AUTO POR MTE (CAL. A)</label><input type="number" min="0" step="1" className="custom-select" value={config.creditosAutoA ?? DEFAULT_FLEX_DAYS_A} onChange={e => handleChange('creditosAutoA', e.target.value)} /></div>
 	                        </div>
 	                    </div>
 
 	                    <div className="panel p-5 bg-slate-50/70 border-slate-200">
-	                        <h3 className="font-black text-slate-800 border-b border-slate-200 pb-2 mb-4 uppercase text-xs tracking-widest">📥 Sorteo Rotación</h3>
+	                        <h3 className="font-black text-slate-800 border-b border-slate-200 pb-2 mb-4 uppercase text-xs tracking-widest">Sorteo rotaci&oacute;n</h3>
 	                        <div className="space-y-3">
 	                            <input id="rotationExcelInput" type="file" accept=".xlsx,.xls" className="hidden" onChange={handleRotationExcelImport} />
-                            <p className="text-[11px] text-gray-600">Sube un Excel con <b>una sola columna</b> y <b>un DNE por fila</b>. Ese listado se usará luego para generar el orden de rotación con el número ONCE y <b>ajustará automáticamente la plantilla MTE total</b> al número de registros leídos.</p>
+	                            <p className="text-[11px] text-gray-600">Sube un Excel con <b>una sola columna</b> y <b>un DNE por fila</b>. Ese listado se usar&aacute; luego para generar el orden de rotaci&oacute;n con el n&uacute;mero ONCE y <b>ajustar&aacute; autom&aacute;ticamente la plantilla MTE total</b> al n&uacute;mero de registros le&iacute;dos.</p>
 	                            <div className="bg-white/80 border border-slate-200 rounded-xl p-3 space-y-2">
 	                                <div className="flex justify-between items-center">
 	                                    <span className="text-[10px] font-bold text-gray-600 uppercase">Fichero actual</span>
 	                                    <span className="text-[11px] font-black text-slate-800">{config.rotationDneFileName || 'Sin cargar'}</span>
 	                                </div>
 	                                <div className="flex justify-between items-center">
-	                                    <span className="text-[10px] font-bold text-gray-600 uppercase">DNE leídos</span>
+		                                    <span className="text-[10px] font-bold text-gray-600 uppercase">DNE le&iacute;dos</span>
 	                                    <span className="text-[11px] font-black text-blue-700">{Array.isArray(config.rotationDneList) ? config.rotationDneList.length : 0}</span>
 	                                </div>
 	                                <div className="flex justify-between items-center">
@@ -794,8 +830,8 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
 	                                                <span className="text-[11px] font-black text-slate-800">{unit}</span>
 	                                            </div>
 	                                            <div className="flex items-center gap-1">
-	                                                <button onClick={() => moveRotationUnit(idx, -1)} disabled={idx === 0} className={`px-2 py-1 rounded text-[10px] font-black ${idx === 0 ? 'bg-gray-200 text-gray-400' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300'}`}>↑</button>
-	                                                <button onClick={() => moveRotationUnit(idx, 1)} disabled={idx === rotationUnitSequence.length - 1} className={`px-2 py-1 rounded text-[10px] font-black ${idx === rotationUnitSequence.length - 1 ? 'bg-gray-200 text-gray-400' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300'}`}>↓</button>
+		                                                <button onClick={() => moveRotationUnit(idx, -1)} disabled={idx === 0} className={`px-2 py-1 rounded text-[10px] font-black ${idx === 0 ? 'bg-gray-200 text-gray-400' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300'}`}>Subir</button>
+		                                                <button onClick={() => moveRotationUnit(idx, 1)} disabled={idx === rotationUnitSequence.length - 1} className={`px-2 py-1 rounded text-[10px] font-black ${idx === rotationUnitSequence.length - 1 ? 'bg-gray-200 text-gray-400' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300'}`}>Bajar</button>
 	                                            </div>
 	                                        </div>
 	                                    ))}
@@ -804,8 +840,8 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
 	                        </div>
 	                    </div>
 
-	                    <div className="panel p-5 bg-orange-50/60 border-orange-200">
-                        <h3 className="font-black text-orange-800 border-b border-orange-200 pb-2 mb-4 uppercase text-xs tracking-widest">🌡️ Nivel de Presión (Cal. A)</h3>
+		                    <div className="panel p-5 bg-orange-50/60 border-orange-200">
+                        <h3 className="font-black text-orange-800 border-b border-orange-200 pb-2 mb-4 uppercase text-xs tracking-widest">Nivel de presi&oacute;n (Cal. A)</h3>
                         <div className="space-y-3">
                             <div className="flex justify-between items-center"><span className="text-[11px] font-bold text-gray-700">Lab. Normales</span><div className="flex items-center gap-1 w-28"><input type="number" step="0.1" className="custom-select text-right" value={toPressureLevel(config.presionLab)} onChange={e => handlePressureLevelChange('presionLab', e.target.value)}/><span className="text-[10px] font-bold">Niv.</span></div></div>
                             <div className="flex justify-between items-center"><span className="text-[11px] font-bold text-gray-700">F.S. Normales</span><div className="flex items-center gap-1 w-28"><input type="number" step="0.1" className="custom-select text-right" value={toPressureLevel(config.presionSD)} onChange={e => handlePressureLevelChange('presionSD', e.target.value)}/><span className="text-[10px] font-bold">Niv.</span></div></div>
@@ -822,14 +858,14 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
                     </div>
 
                     <div className="panel p-5 bg-indigo-50/60 border-indigo-200">
-                        <h3 className="font-black text-indigo-800 border-b border-indigo-200 pb-2 mb-4 uppercase text-xs tracking-widest">🧠 Parámetros Lógicos y Festivos</h3>
+	                        <h3 className="font-black text-indigo-800 border-b border-indigo-200 pb-2 mb-4 uppercase text-xs tracking-widest">Par&aacute;metros l&oacute;gicos y festivos</h3>
                         <div className="space-y-4">
                             <div className="flex justify-between items-center border-b border-indigo-100 pb-3">
-                                <span className="text-[11px] font-bold text-gray-700">Años Proyección (Rotación)</span>
+	                                <span className="text-[11px] font-bold text-gray-700">A&ntilde;os proyecci&oacute;n (rotaci&oacute;n)</span>
                                 <input type="number" className="custom-select w-20 text-center" value={config.proyeccionAnos} onChange={e => handleChange('proyeccionAnos', e.target.value)} />
                             </div>
                             <div>
-                                <label className="text-[10px] font-bold text-indigo-900 block mb-2">FESTIVOS LOCALES (Mes-Día)</label>
+	                                <label className="text-[10px] font-bold text-indigo-900 block mb-2">FESTIVOS LOCALES (Mes-D&iacute;a)</label>
                                 <div className="flex flex-wrap gap-2 mb-2">
                                     {(config.customHolidays || []).map((h, i) => {
                                         const [m, d] = h.split('-');
@@ -845,7 +881,7 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
                                     <select id="newHolMonth" className="custom-select w-1/2">
                                         {MESES.map((m, i) => <option key={i} value={i}>{m}</option>)}
                                     </select>
-                                    <input type="number" id="newHolDay" placeholder="Día" className="custom-select w-1/3 text-center" min="1" max="31" />
+	                                    <input type="number" id="newHolDay" placeholder="D&iacute;a" className="custom-select w-1/3 text-center" min="1" max="31" />
                                     <button onClick={() => {
                                         const d = document.getElementById('newHolDay').value;
                                         const m = document.getElementById('newHolMonth').value;
@@ -857,16 +893,16 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
                     </div>
 
                     <div className="panel p-5 bg-teal-50/60 border-teal-200">
-                        <h3 className="font-black text-teal-800 border-b border-teal-200 pb-2 mb-4 uppercase text-xs tracking-widest">🧩 Gestión de PAP</h3>
+	                        <h3 className="font-black text-teal-800 border-b border-teal-200 pb-2 mb-4 uppercase text-xs tracking-widest">Gesti&oacute;n de PAP</h3>
                         <div className="space-y-4">
                             <div className="flex justify-between items-center">
-                                <span className="text-[11px] font-bold text-gray-700">Días PAP por MTE</span>
+	                                <span className="text-[11px] font-bold text-gray-700">D&iacute;as PAP por MTE</span>
                                 <input type="number" className="custom-select w-20 text-center font-bold text-teal-700" value={config.maxPAPGlobal} onChange={e => handleChange('maxPAPGlobal', e.target.value)} />
                             </div>
                             <div className="bg-white/60 p-3 rounded-lg border border-teal-100 space-y-3">
-                                <h4 className="text-[9px] font-bold text-teal-900 uppercase">Motor de Asignación Automática</h4>
+	                                <h4 className="text-[9px] font-bold text-teal-900 uppercase">Motor de asignaci&oacute;n autom&aacute;tica</h4>
                                 <div className="flex justify-between items-center">
-                                    <span className="text-[10px] text-gray-600 font-medium">Habilitar IA Asignación</span>
+	                                    <span className="text-[10px] text-gray-600 font-medium">Habilitar IA asignaci&oacute;n</span>
                                     <button onClick={() => handleChange('autoAssignPAP', config.autoAssignPAP ? 0 : 1)} className={`toggle-btn ${config.autoAssignPAP ? 'bg-teal-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
                                         {config.autoAssignPAP ? 'ON' : 'OFF'}
                                     </button>
@@ -877,14 +913,14 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
                                 </div>
                             </div>
                             <div className="bg-white/60 p-3 rounded-lg border border-teal-100 space-y-2">
-                                <h4 className="text-[9px] font-bold text-teal-900 uppercase">Cupos PAP Actuales (Lab / Sáb / Dom)</h4>
+	                                <h4 className="text-[9px] font-bold text-teal-900 uppercase">Cupos PAP actuales (Lab / S&aacute;b / Dom)</h4>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-[10px]">
                                         <thead>
                                             <tr className="text-gray-600 uppercase">
                                                 <th className="text-left py-1 pr-2">Temporada</th>
                                                 <th className="text-center py-1 px-1">Lab</th>
-                                                <th className="text-center py-1 px-1">Sáb</th>
+	                                                <th className="text-center py-1 px-1">S&aacute;b</th>
                                                 <th className="text-center py-1 px-1">Dom</th>
                                             </tr>
                                         </thead>
@@ -928,28 +964,28 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
                 </div>
 
                 {/* TABLA PRINCIPAL DE CUPOS */}
-	                <div className="lg:col-span-2 flex flex-col gap-6">
+		                <div className="flex flex-col gap-6">
 	                    <div className="panel p-5 bg-orange-50/70 border-orange-200">
 	                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-4">
 	                            <div>
-	                                <h3 className="font-black text-orange-800 border-b border-orange-200 pb-2 mb-2 uppercase text-sm tracking-widest">🎯 Preferencia Auto Simplificada (Cal. A)</h3>
-	                                <p className="text-[11px] text-gray-600 max-w-2xl">La prioridad automática de agotamiento de cupos en A ya no se ajusta mes a mes. Ahora usamos 5 tramos claros y el sistema reparte el mismo valor a los meses de cada tramo.</p>
+		                                <h3 className="font-black text-orange-800 border-b border-orange-200 pb-2 mb-2 uppercase text-sm tracking-widest">Preferencia auto simplificada (Cal. A)</h3>
+		                                <p className="text-[11px] text-gray-600 max-w-2xl">La prioridad autom&aacute;tica de agotamiento de cupos en A ya no se ajusta mes a mes. Ahora usamos 5 tramos claros y el sistema reparte el mismo valor a los meses de cada tramo.</p>
 	                            </div>
 	                            <button onClick={applyAutoProfileDefaults} className="px-3 py-2 bg-white text-orange-700 border border-orange-300 rounded-xl text-[10px] font-bold shadow-sm hover:bg-orange-100 transition-colors">Restaurar perfil base</button>
 	                        </div>
-	                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+		                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
 	                            {AUTO_A_PROFILE_SEGMENTS.map(segment => (
 	                                <div key={segment.key} className="bg-white/80 border border-orange-200 rounded-xl p-3 shadow-sm">
 	                                    <label className="text-[10px] font-bold text-orange-900 uppercase tracking-wider block mb-1">{segment.label}</label>
 	                                    <input type="number" step="0.1" min="0" className="custom-select text-center font-black text-orange-700" value={config[segment.key]} onChange={e => handleAutoProfileChange(segment.key, e.target.value)} />
-	                                    <p className="text-[9px] text-gray-500 mt-2">{segment.months.map(monthIdx => MESES[monthIdx].slice(0, 3)).join(' · ')}</p>
+		                                    <p className="text-[9px] text-gray-500 mt-2">{segment.months.map(monthIdx => MESES[monthIdx].slice(0, 3)).join(' - ')}</p>
 	                                </div>
 	                            ))}
 	                        </div>
 	                    </div>
 	                    <div className="panel p-5 bg-white/80 border-blue-200">
-	                        <h3 className="font-black text-blue-900 border-b border-blue-200 pb-2 mb-4 uppercase text-sm tracking-widest">📅 Cupos Físicos y Preferencias Mensuales</h3>
-	                        <p className="text-[11px] text-gray-600 mb-4">Ajusta los huecos reales del calendario (Lab / S/D / Festivos). El <b className="text-purple-700">Peso</b> define la prioridad relativa de cada periodo y la columna <b className="text-orange-600">Auto (A)</b> es una previsualización del perfil simplificado aplicado a cada mes.</p>
+	                        <h3 className="font-black text-blue-900 border-b border-blue-200 pb-2 mb-4 uppercase text-sm tracking-widest">Cupos f&iacute;sicos y preferencias mensuales</h3>
+	                        <p className="text-[11px] text-gray-600 mb-4">Ajusta los huecos reales del calendario (Lab / S/D / Festivos). El <b className="text-purple-700">Peso</b> define la prioridad relativa de cada periodo y la columna <b className="text-orange-600">Auto (A)</b> es una previsualizaci&oacute;n del perfil simplificado aplicado a cada mes.</p>
 	                        
 	                        <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
 	                            <table className="w-full text-left bg-white">
@@ -3639,6 +3675,7 @@ function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
 function AppRouter() {
     const [view, setView] = useState('home');
     const [pendingScenario, setPendingScenario] = useState(null);
+    const [autoRotationTemplateAttempted, setAutoRotationTemplateAttempted] = useState(false);
     
     // ESTADO GLOBAL COMPLETO (Se inyecta en todo el motor)
     const defaultConfig = {
@@ -3717,6 +3754,34 @@ function AppRouter() {
             setConfig(prev => lockJanuaryQuotaA(prev));
         }
     }, [config.c_0_0, config.c_0_1, config.c_0_2]);
+    useEffect(() => {
+        if (autoRotationTemplateAttempted) return;
+        if (Array.isArray(config.rotationDneList) && config.rotationDneList.length > 0) {
+            setAutoRotationTemplateAttempted(true);
+            return;
+        }
+        if (typeof fetch !== 'function' || typeof XLSX === 'undefined') return;
+        let cancelled = false;
+        const loadDefaultRotationTemplate = async () => {
+            try {
+                const response = await fetch('mtes.xlsx', { cache: 'no-store' });
+                if (!response.ok) throw new Error('fetch');
+                const buffer = await response.arrayBuffer();
+                const dneList = extractRotationDneListFromWorkbookData(buffer);
+                if (cancelled) return;
+                setConfig(prev => {
+                    if (Array.isArray(prev.rotationDneList) && prev.rotationDneList.length > 0) return prev;
+                    return applyRotationTemplateToConfig(prev, dneList, 'mtes.xlsx');
+                });
+            } catch (_) {
+                // Si el fichero no está disponible, seguimos sin bloquear la app.
+            } finally {
+                if (!cancelled) setAutoRotationTemplateAttempted(true);
+            }
+        };
+        loadDefaultRotationTemplate();
+        return () => { cancelled = true; };
+    }, [autoRotationTemplateAttempted, config.rotationDneList]);
     const saveConfig = useCallback((cfg) => {
         try {
             const normalizedConfig = normalizeAutoAMultipliers(lockJanuaryQuotaA({ ...defaultConfig, ...(cfg || {}) }));
