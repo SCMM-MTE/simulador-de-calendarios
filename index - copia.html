@@ -172,6 +172,62 @@ const normalizeRotationUnitSequence = (sequence) => {
     });
     return unique.slice(0, ALL_ROTATION_UNITS.length);
 };
+const distributeIntegerBuckets = (total, bucketCount) => {
+    const safeTotal = Math.max(0, Math.round(Number(total) || 0));
+    const safeBuckets = Math.max(1, Math.round(Number(bucketCount) || 1));
+    const base = Math.floor(safeTotal / safeBuckets);
+    const remainder = safeTotal % safeBuckets;
+    return Array.from({ length: safeBuckets }, (_, idx) => base + (idx < remainder ? 1 : 0));
+};
+const summarizeIntegerDistribution = (values) => {
+    const safeValues = Array.isArray(values) ? values : [];
+    if (safeValues.length === 0) return '0';
+    const unique = [...new Set(safeValues)];
+    if (unique.length <= 3) return safeValues.join(' / ');
+    const counts = new Map();
+    safeValues.forEach(value => counts.set(value, (counts.get(value) || 0) + 1));
+    return Array.from(counts.entries())
+        .sort((a, b) => Number(b[0]) - Number(a[0]))
+        .map(([value, count]) => `${value} x ${count}`)
+        .join(', ');
+};
+const getRotationBlockBreakdown = (totalMte, configuredBlockSize) => {
+    const safeTotal = Math.max(0, Number(totalMte) || 0);
+    const autoBlockSize = Math.max(1, Math.round((safeTotal || 2100) / 13));
+    const explicitBlockSize = Number(configuredBlockSize);
+    const blockSize = Number.isFinite(explicitBlockSize) && explicitBlockSize > 0 ? Math.round(explicitBlockSize) : autoBlockSize;
+    const subbloques = distributeIntegerBuckets(blockSize, 3);
+    const subsubbloques = distributeIntegerBuckets(blockSize, 12);
+    return {
+        bloque: blockSize,
+        subbloques,
+        subsubbloques,
+        subbloque: summarizeIntegerDistribution(subbloques),
+        subsubbloque: summarizeIntegerDistribution(subsubbloques),
+        autoBloque: autoBlockSize
+    };
+};
+const extractRotationDneListFromWorkbookData = (arrayBuffer) => {
+    if (typeof XLSX === 'undefined') throw new Error('xlsx');
+    const data = new Uint8Array(arrayBuffer);
+    const workbook = XLSX.read(data, { type: 'array' });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) throw new Error('sheet');
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
+    const dneList = rows
+        .map(row => Array.isArray(row) ? String(row[0] ?? '').trim() : '')
+        .filter(Boolean);
+    if (dneList.length === 0) throw new Error('empty');
+    return dneList;
+};
+const applyRotationTemplateToConfig = (prevConfig, dneList, fileName = 'mtes.xlsx') => normalizeAutoAMultipliers({
+    ...prevConfig,
+    globalMTE: dneList.length,
+    rotationBlockSize: Math.round(dneList.length / 13),
+    rotationDneList: dneList,
+    rotationDneFileName: fileName
+});
 const buildRotationAssignmentSlots = (totalMte, unitSequence = DEFAULT_ROTATION_ASSIGNMENT_UNIT_SEQUENCE) => {
     const normalizedTotal = Math.max(0, Number(totalMte) || 0);
     const slots = [];
@@ -522,6 +578,7 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
         setTimeout(() => setSaveStatus(""), 2500);
     }, []);
     const handleChange = (key, value) => setConfig(prev => normalizeAutoAMultipliers({ ...prev, [key]: Number(value) }));
+    const rotationBlockBreakdown = useMemo(() => getRotationBlockBreakdown(config?.globalMTE, config?.rotationBlockSize), [config?.globalMTE, config?.rotationBlockSize]);
     const toPressureLevel = (pct) => Math.round(((Number(pct) || 0) / PRESSURE_LEVEL_UNIT) * 10) / 10;
     const handlePressureLevelChange = (key, value) => {
         const level = Number(value);
@@ -551,22 +608,8 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
         const reader = new FileReader();
         reader.onload = () => {
             try {
-                const data = new Uint8Array(reader.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const sheetName = workbook.SheetNames[0];
-                if (!sheetName) throw new Error('sheet');
-                const sheet = workbook.Sheets[sheetName];
-                const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
-                const dneList = rows
-                    .map(row => Array.isArray(row) ? String(row[0] ?? '').trim() : '')
-                    .filter(Boolean);
-                if (dneList.length === 0) throw new Error('empty');
-                setConfig(prev => normalizeAutoAMultipliers({
-                    ...prev,
-                    globalMTE: dneList.length,
-                    rotationDneList: dneList,
-                    rotationDneFileName: file.name
-                }));
+                const dneList = extractRotationDneListFromWorkbookData(reader.result);
+                setConfig(prev => applyRotationTemplateToConfig(prev, dneList, file.name));
                 showStatus(`Excel cargado (${dneList.length} DNE). Plantilla MTE ajustada a ${dneList.length}.`);
             } catch (_) {
                 showStatus('Error al leer Excel: usa una sola columna con un DNE por fila');
@@ -667,7 +710,7 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
                         <p>Este panel es el <b>cerebro de la aplicación</b>. Modificar valores aquí cambia en tiempo real el comportamiento de todos los simuladores de la suite.</p>
                         <div className="bg-blue-50 p-4 rounded-xl">
                             <h4 className="font-bold text-blue-900 mb-1">1. Datos Generales</h4>
-                            <p>El <b>MTE Total</b> (Plantilla) alimenta la rotación y la capacidad de las quincenas. El límite de solapamiento dicta cuándo una persona no puede pedir un periodo de 15 días en el Cal. C porque "choca" con sus vacaciones base.</p>
+                            <p>El <b>MTE Total</b> (Plantilla) alimenta la rotación y la capacidad de los escenarios activos. El límite de solapamiento marca cuándo una persona no puede pedir un periodo largo porque "choca" con sus vacaciones base.</p>
                         </div>
                         <div className="bg-orange-50 p-4 rounded-xl">
                             <h4 className="font-bold text-orange-900 mb-1">2. Presión Base (Calendario A)</h4>
@@ -675,7 +718,7 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
                         </div>
 	                        <div className="bg-purple-50 p-4 rounded-xl">
 	                            <h4 className="font-bold text-purple-900 mb-1">3. Cupos y Preferencias Mensuales</h4>
-	                            <p>Aquí inyectas los cupos reales del año actual. El <b>Peso (C)</b> permite jugar con la cascada. La <b>Preferencia Auto (A)</b> ahora se ajusta por tramos estacionales, para evitar tocar 12 meses uno a uno.</p>
+	                            <p>Aquí inyectas los cupos reales del año actual. El <b>Peso</b> define la prioridad relativa entre periodos y la <b>Preferencia Auto (A)</b> ahora se ajusta por tramos estacionales, para evitar tocar 12 meses uno a uno.</p>
 	                        </div>
 	                    </div>
 	                </Modal>
@@ -702,8 +745,16 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
 	                        <h3 className="font-black text-blue-800 border-b border-blue-200 pb-2 mb-4 uppercase text-xs tracking-widest">👥 Datos Generales</h3>
 		                            <div className="space-y-4">
                             <div><label className="text-[10px] font-bold text-gray-600 block mb-1">PLANTILLA MTE TOTAL</label><input type="number" className="custom-select font-black text-blue-700 text-lg py-2" value={config.globalMTE} onChange={e => handleChange('globalMTE', e.target.value)} /></div>
+                            <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-200">
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                    <label className="text-[10px] font-bold text-indigo-800 block">TAMAÑO BLOQUE ROTACIÓN</label>
+                                    <button onClick={() => handleChange('rotationBlockSize', rotationBlockBreakdown.autoBloque)} className="px-2 py-1 bg-white text-indigo-700 border border-indigo-300 rounded-lg text-[10px] font-bold hover:bg-indigo-100 transition-colors">Auto</button>
+                                </div>
+	                                <input type="number" min="0" step="1" className="custom-select font-black text-indigo-700 text-lg py-2" value={config.rotationBlockSize ?? rotationBlockBreakdown.autoBloque} onChange={e => setConfig(prev => normalizeAutoAMultipliers({ ...prev, rotationBlockSize: Math.max(0, Math.round(Number(e.target.value) || 0)) }))} />
+	                                <p className="text-[9px] text-indigo-700 mt-2 leading-tight">Pon <b>0</b> para cálculo automático por plantilla ({rotationBlockBreakdown.autoBloque}). Reparto entero actual: <b>{rotationBlockBreakdown.subbloque}</b> por subbloque y <b>{rotationBlockBreakdown.subsubbloque}</b> por unidad.</p>
+                            </div>
                             <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
-                                <label className="text-[10px] font-bold text-purple-800 block mb-1">CAPACIDAD CAL. C (Por Grupo)</label>
+                                <label className="text-[10px] font-bold text-purple-800 block mb-1">CAPACIDAD DE REFERENCIA (Por Grupo)</label>
                                 <div className="text-xl font-black text-purple-900">{Math.max(1, Math.round((config.globalMTE || 2100) / 52))} plazas</div>
                                 <p className="text-[9px] text-purple-600 mt-1 leading-tight">Fórmula Automática: MTE / 4 Grupos / 13 Periodos</p>
                             </div>
@@ -904,7 +955,7 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
 	                    </div>
 	                    <div className="panel p-5 bg-white/80 border-blue-200">
 	                        <h3 className="font-black text-blue-900 border-b border-blue-200 pb-2 mb-4 uppercase text-sm tracking-widest">📅 Cupos Físicos y Preferencias Mensuales</h3>
-	                        <p className="text-[11px] text-gray-600 mb-4">Ajusta los huecos reales del calendario (Lab / S/D / Festivos). El <b className="text-purple-700">Peso (C)</b> define en qué orden se llenan las quincenas. La columna <b className="text-orange-600">Auto (A)</b> es una previsualización del perfil simplificado aplicado a cada mes.</p>
+	                        <p className="text-[11px] text-gray-600 mb-4">Ajusta los huecos reales del calendario (Lab / S/D / Festivos). El <b className="text-purple-700">Peso</b> define la prioridad relativa de cada periodo y la columna <b className="text-orange-600">Auto (A)</b> es una previsualización del perfil simplificado aplicado a cada mes.</p>
 	                        
 	                        <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
 	                            <table className="w-full text-left bg-white">
@@ -914,7 +965,7 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
                                         <th className="p-2 font-black text-center text-blue-800 bg-blue-50/50">Lab</th>
                                         <th className="p-2 font-black text-center text-blue-800 bg-blue-50/50">S/D</th>
                                         <th className="p-2 font-black text-center text-blue-800 bg-blue-50/50 border-r border-gray-200">Fes</th>
-                                        <th className="p-2 font-black text-purple-700 text-center border-r border-gray-200">Peso (C)</th>
+	                                        <th className="p-2 font-black text-purple-700 text-center border-r border-gray-200">Peso</th>
 	                                        <th className="p-2 font-black text-orange-600 text-center">Auto (A)</th>
 	                                    </tr>
 	                                </thead>
@@ -2218,10 +2269,11 @@ function SimuladorRotacion({ globalMTE, config, onBack }) {
 	    const [generalSequenceMode, setGeneralSequenceMode] = useState('unidad');
 	    const [generalVisionMode, setGeneralVisionMode] = useState('unidad');
 	    const [onceNumber, setOnceNumber] = useState('00000');
-    const [showRotationOrderPanel, setShowRotationOrderPanel] = useState(true);
-    const [rotationSearchTerm, setRotationSearchTerm] = useState('');
+	    const [showRotationOrderPanel, setShowRotationOrderPanel] = useState(true);
+	    const [rotationSearchTerm, setRotationSearchTerm] = useState('');
+	    const [rotationSort, setRotationSort] = useState({ key: 'order', direction: 'asc' });
     
-	    const mteDesglose = useMemo(() => ({ bloque: Math.round(globalMTE / 13), subbloque: Math.round(globalMTE / 39), subsubbloque: Math.round(globalMTE / 156) }), [globalMTE]);
+	    const mteDesglose = useMemo(() => getRotationBlockBreakdown(globalMTE, config?.rotationBlockSize), [globalMTE, config?.rotationBlockSize]);
 	    const activeScheme = getGroupColor(selectedId.charAt(0));
 	    const selectedGroupLabel = useMemo(() => selectedId.charAt(0), [selectedId]);
 	    const selectedSubPosition = useMemo(() => {
@@ -2256,15 +2308,35 @@ function SimuladorRotacion({ globalMTE, config, onBack }) {
         const startIdx = Math.min(rotationDneList.length - 1, Math.max(0, winningStartPosition - 1));
         return rotationDneList[startIdx] || '';
     }, [rotationDneList, winningStartPosition]);
-    const rotationAssignmentSlots = useMemo(() => buildRotationAssignmentSlots(rotationDneList.length, rotationUnitSequence), [rotationDneList.length, rotationUnitSequence]);
-    const orderedRotationDneList = useMemo(() => {
-        if (rotationDneList.length === 0 || winningStartPosition <= 0) return [];
-        const startIdx = Math.min(rotationDneList.length - 1, Math.max(0, winningStartPosition - 1));
-        return [...rotationDneList.slice(startIdx), ...rotationDneList.slice(0, startIdx)];
-    }, [rotationDneList, winningStartPosition]);
-    const generatedRotationOrder = useMemo(() => {
-        if (orderedRotationDneList.length === 0) return [];
-        return orderedRotationDneList.map((dne, idx) => {
+	    const rotationAssignmentSlots = useMemo(() => buildRotationAssignmentSlots(rotationDneList.length, rotationUnitSequence), [rotationDneList.length, rotationUnitSequence]);
+	    const rotationSeatsPerUnit = useMemo(() => {
+	        const unitCount = Math.max(1, rotationUnitSequence.length || ALL_ROTATION_UNITS.length);
+	        if (rotationTemplateSize <= 0) return 1;
+	        return Math.max(1, Math.ceil(rotationTemplateSize / (13 * unitCount)));
+	    }, [rotationTemplateSize, rotationUnitSequence]);
+	    const rotationBlockCapacity = useMemo(() => {
+	        const unitCount = Math.max(1, rotationUnitSequence.length || ALL_ROTATION_UNITS.length);
+	        return unitCount * rotationSeatsPerUnit;
+	    }, [rotationUnitSequence, rotationSeatsPerUnit]);
+	    const orderedRotationDneList = useMemo(() => {
+	        if (rotationDneList.length === 0 || winningStartPosition <= 0) return [];
+	        const startIdx = Math.min(rotationDneList.length - 1, Math.max(0, winningStartPosition - 1));
+	        return [...rotationDneList.slice(startIdx), ...rotationDneList.slice(0, startIdx)];
+	    }, [rotationDneList, winningStartPosition]);
+	    const getRotationAheadCount = useCallback((blockId, unitId, seatValue, contentStep = 0) => {
+	        const numericBlockId = Number(blockId);
+	        if (!Number.isFinite(numericBlockId) || numericBlockId < 1) return 0;
+	        const blockLinearIndex = Math.max(0, Math.min(12, numericBlockId - 1));
+	        const contentForBlock = getRotationBlockContent(contentStep);
+	        const flatOrder = contentForBlock.flatMap(group => group.subs.map(num => `${group.label}${num}`));
+	        const unitIndex = flatOrder.indexOf(unitId);
+	        const normalizedSeat = Math.max(1, Number(seatValue) || 1);
+	        const rawAheadCount = (blockLinearIndex * rotationBlockCapacity) + (Math.max(0, unitIndex) * rotationSeatsPerUnit) + (normalizedSeat - 1);
+	        return Math.max(0, Math.min(Math.max(0, rotationTemplateSize - 1), rawAheadCount));
+	    }, [rotationBlockCapacity, rotationSeatsPerUnit, rotationTemplateSize]);
+	    const generatedRotationOrder = useMemo(() => {
+	        if (orderedRotationDneList.length === 0) return [];
+	        return orderedRotationDneList.map((dne, idx) => {
             const slot = rotationAssignmentSlots[idx] || null;
             return {
                 order: idx + 1,
@@ -2278,29 +2350,80 @@ function SimuladorRotacion({ globalMTE, config, onBack }) {
         });
     }, [orderedRotationDneList, rotationAssignmentSlots]);
     const normalizedRotationSearch = useMemo(() => String(rotationSearchTerm || '').trim().toLowerCase(), [rotationSearchTerm]);
-    const filteredRotationOrder = useMemo(() => {
-        if (!normalizedRotationSearch) return generatedRotationOrder;
-        return generatedRotationOrder.filter(row => String(row.dne || '').toLowerCase().includes(normalizedRotationSearch));
-    }, [generatedRotationOrder, normalizedRotationSearch]);
-    const searchedRotationRow = useMemo(() => {
-        if (!normalizedRotationSearch) return null;
-        const exact = generatedRotationOrder.find(row => String(row.dne || '').toLowerCase() === normalizedRotationSearch);
-        if (exact) return exact;
-        return filteredRotationOrder[0] || null;
+	    const filteredRotationOrder = useMemo(() => {
+	        if (!normalizedRotationSearch) return generatedRotationOrder;
+	        return generatedRotationOrder.filter(row => String(row.dne || '').toLowerCase().includes(normalizedRotationSearch));
+	    }, [generatedRotationOrder, normalizedRotationSearch]);
+	    const sortedRotationOrder = useMemo(() => {
+	        const rows = filteredRotationOrder.map(row => {
+	            const ahead = getRotationAheadCount(row.block, row.unit, row.seat);
+	            return {
+	                ...row,
+	                ahead,
+	                behind: Math.max(0, generatedRotationOrder.length - ahead - 1),
+	                rotationPosition: ahead + 1
+	            };
+	        });
+	        const { key, direction } = rotationSort || {};
+	        if (!key) return rows;
+	        const factor = direction === 'desc' ? -1 : 1;
+	        const compareText = (left, right) => String(left || '').localeCompare(String(right || ''), 'es', { numeric: true, sensitivity: 'base' });
+	        const compareNumber = (left, right) => (Number(left) || 0) - (Number(right) || 0);
+	        rows.sort((a, b) => {
+	            switch (key) {
+	                case 'dne':
+	                    return compareText(a.dne, b.dne) * factor;
+	                case 'block':
+	                    return compareNumber(a.block, b.block) * factor;
+	                case 'unit':
+	                    return compareText(a.unit, b.unit) * factor;
+	                case 'seat':
+	                    return compareNumber(a.seat, b.seat) * factor;
+	                case 'slotLabel':
+	                    return compareText(a.slotLabel, b.slotLabel) * factor;
+	                case 'rotationPosition':
+	                    return compareNumber(a.rotationPosition, b.rotationPosition) * factor;
+	                case 'ahead':
+	                    return compareNumber(a.ahead, b.ahead) * factor;
+	                case 'behind':
+	                    return compareNumber(a.behind, b.behind) * factor;
+	                case 'order':
+	                default:
+	                    return compareNumber(a.order, b.order) * factor;
+	            }
+	        });
+	        return rows;
+	    }, [filteredRotationOrder, generatedRotationOrder.length, getRotationAheadCount, rotationSort]);
+	    const searchedRotationRow = useMemo(() => {
+	        if (!normalizedRotationSearch) return null;
+	        const exact = generatedRotationOrder.find(row => String(row.dne || '').toLowerCase() === normalizedRotationSearch);
+	        if (exact) return exact;
+	        return filteredRotationOrder[0] || null;
     }, [generatedRotationOrder, filteredRotationOrder, normalizedRotationSearch]);
 	    const searchedRotationSummary = useMemo(() => {
 	        if (!searchedRotationRow) return null;
-	        const ahead = Math.max(0, searchedRotationRow.order - 1);
-	        const behind = Math.max(0, generatedRotationOrder.length - searchedRotationRow.order);
+	        const ahead = getRotationAheadCount(searchedRotationRow.block, searchedRotationRow.unit, searchedRotationRow.seat);
+	        const behind = Math.max(0, generatedRotationOrder.length - ahead - 1);
 	        return {
-            ...searchedRotationRow,
-            ahead,
-            behind
+	            ...searchedRotationRow,
+	            rotationPosition: ahead + 1,
+	            ahead,
+	            behind
 	        };
-	    }, [searchedRotationRow, generatedRotationOrder.length]);
+	    }, [searchedRotationRow, generatedRotationOrder.length, getRotationAheadCount]);
 	    const canUseSearchedVision = useMemo(() => {
 	        return !!(searchedRotationSummary?.unit && ALL_ROTATION_UNITS.includes(searchedRotationSummary.unit));
 	    }, [searchedRotationSummary]);
+	    const searchedVisionStartBlock = useMemo(() => {
+	        const parsed = Number(searchedRotationSummary?.block);
+	        return Number.isFinite(parsed) && parsed >= 1 && parsed <= 13 ? parsed : null;
+	    }, [searchedRotationSummary]);
+	    const visionSequence = useMemo(() => {
+	        if (generalVisionMode === 'dne' && canUseSearchedVision && searchedVisionStartBlock != null) {
+	            return buildRotationSequence(searchedVisionStartBlock);
+	        }
+	        return sequence;
+	    }, [generalVisionMode, canUseSearchedVision, searchedVisionStartBlock, sequence]);
 	    const visionUnitId = useMemo(() => {
 	        if (generalVisionMode === 'dne' && canUseSearchedVision) return searchedRotationSummary.unit;
 	        return selectedId;
@@ -2312,11 +2435,31 @@ function SimuladorRotacion({ globalMTE, config, onBack }) {
 	    }, [generalVisionMode, canUseSearchedVision, searchedRotationSummary, visionUnitId]);
 	    const visionHelperText = useMemo(() => {
 	        if (generalVisionMode === 'dne' && canUseSearchedVision) {
-	            return `Proyección automática para el DNE buscado, siguiendo su asignación actual en ${searchedRotationSummary.slotLabel}.`;
+	            return `Proyección automática para el DNE buscado, siguiendo su asignación actual en ${searchedRotationSummary.slotLabel} y respetando su puesto real dentro de la unidad.`;
 	        }
 	        return 'Proyección automática de posición, subbloque, subsubbloque y MTE delante para la unidad seleccionada.';
 	    }, [generalVisionMode, canUseSearchedVision, searchedRotationSummary]);
 
+	    const handleSelectRotationDne = useCallback((row) => {
+	        if (!row?.dne) return;
+	        setRotationSearchTerm(String(row.dne));
+	        if (row.unit && ALL_ROTATION_UNITS.includes(row.unit)) {
+	            setSelectedId(row.unit);
+	            setGeneralVisionMode('dne');
+	        }
+	    }, []);
+	    const handleRotationSort = useCallback((key) => {
+	        setRotationSort(prev => {
+	            if (prev.key === key) {
+	                return { key, direction: prev.direction === 'desc' ? 'asc' : 'desc' };
+	            }
+	            return { key, direction: 'desc' };
+	        });
+	    }, []);
+	    const getRotationSortIcon = useCallback((key) => {
+	        if (rotationSort.key !== key) return '↕';
+	        return rotationSort.direction === 'desc' ? '↓' : '↑';
+	    }, [rotationSort]);
 	    const currentContent = getRotationBlockContent(currentStep);
 
     useEffect(() => { let i; if (isPlaying) { i = setInterval(() => { setCurrentStep(p => p + 1); }, 2000); } return () => clearInterval(i); }, [isPlaying]);
@@ -2709,8 +2852,8 @@ th { background: #f3f4f6; text-align: center; }
 	                                    <div className="bg-white/60 p-2.5 rounded-lg border border-gray-200/50 shadow-sm backdrop-blur-sm">
 	                                        <div className="text-[9px] font-black text-blue-800 uppercase mb-1.5 border-b border-blue-100 pb-1">Desglose de Plantilla (Total: {globalMTE})</div>
                                         <div className="flex justify-between items-center mb-1"><span className="text-[10px] text-gray-600 font-bold">Por Bloque (P1..P13):</span><span className="text-[11px] font-black text-blue-700">{mteDesglose.bloque}</span></div>
-                                        <div className="flex justify-between items-center mb-1"><span className="text-[10px] text-gray-600 font-bold">Por Subbloque ({subBlockRangeLabel}):</span><span className="text-[11px] font-black text-blue-700">{mteDesglose.subbloque}</span></div>
-                                        <div className="flex justify-between items-center"><span className="text-[10px] text-gray-600 font-bold">Por Unidad ({unitRangeLabel}):</span><span className="text-[11px] font-black text-blue-700">{mteDesglose.subsubbloque}</span></div>
+                                        <div className="flex justify-between items-center mb-1"><span className="text-[10px] text-gray-600 font-bold">Por Subbloque ({subBlockRangeLabel}):</span><span className="text-[11px] font-black text-blue-700 text-right">{mteDesglose.subbloque}</span></div>
+                                        <div className="flex justify-between items-center"><span className="text-[10px] text-gray-600 font-bold">Por Unidad ({unitRangeLabel}):</span><span className="text-[11px] font-black text-blue-700 text-right">{mteDesglose.subsubbloque}</span></div>
                                     </div>
                                 </div>
                             </div>
@@ -2858,52 +3001,81 @@ th { background: #f3f4f6; text-align: center; }
 	                                        <div className="bg-white/70 rounded-xl border border-gray-200 p-3">
 	                                            <div className="text-[9px] font-black text-gray-500 uppercase mb-2">Resultado buscador</div>
 	                                            {!searchedRotationSummary ? (
-	                                                <div className="text-[11px] font-bold text-gray-500">Introduce un DNE para ver su posición, bloque, unidad y los MTE delante/detrás.</div>
-	                                            ) : (
-		                                                <div className="space-y-1.5 rotation-wrap">
-		                                                    <div className="text-sm font-black text-emerald-700 rotation-wrap">{searchedRotationSummary.dne}</div>
-	                                                    <div className="text-[11px] font-bold text-slate-700">Orden: {searchedRotationSummary.order}</div>
-	                                                    <div className="text-[11px] font-bold text-slate-700">Posición: Bloque {searchedRotationSummary.block} · {searchedRotationSummary.unit} · Puesto {searchedRotationSummary.seat}</div>
-	                                                    <div className="text-[11px] font-bold text-blue-700">MTE delante: {searchedRotationSummary.ahead}</div>
-	                                                    <div className="text-[11px] font-bold text-violet-700">MTE detrás: {searchedRotationSummary.behind}</div>
-	                                                </div>
+		                                                <div className="text-[11px] font-bold text-gray-500">Introduce un DNE para ver su orden en el sorteo, su posición real en rotación y los MTE delante/detrás.</div>
+		                                            ) : (
+			                                                <div className="space-y-1.5 rotation-wrap">
+				                                                    <button type="button" onClick={() => handleSelectRotationDne(searchedRotationSummary)} className="text-left text-sm font-black text-emerald-700 rotation-wrap hover:underline">
+				                                                        {searchedRotationSummary.dne}
+				                                                    </button>
+		                                                    <div className="text-[11px] font-bold text-slate-700">Orden sorteo: {searchedRotationSummary.order}</div>
+		                                                    <div className="text-[11px] font-bold text-slate-700">Posición real: {searchedRotationSummary.rotationPosition} / {generatedRotationOrder.length}</div>
+		                                                    <div className="text-[11px] font-bold text-slate-700">Ubicación: Bloque {searchedRotationSummary.block} · Subbloque {searchedRotationSummary.unit} · Puesto {searchedRotationSummary.seat}</div>
+		                                                    <div className="text-[11px] font-bold text-blue-700">MTE delante: {searchedRotationSummary.ahead}</div>
+		                                                    <div className="text-[11px] font-bold text-violet-700">MTE detrás: {searchedRotationSummary.behind}</div>
+		                                                </div>
 	                                            )}
+	                                        </div>
+	                                    </div>
+	                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3 bg-white/60 rounded-xl border border-gray-200 p-3">
+	                                        <div className="text-[10px] font-bold text-gray-600 uppercase">Ordenar tabla</div>
+	                                        <div className="flex flex-col sm:flex-row gap-2">
+	                                            <select className="custom-select py-2 text-xs font-bold text-gray-700" value={rotationSort.key} onChange={(e) => setRotationSort(prev => ({ ...prev, key: e.target.value }))}>
+	                                                <option value="order">Orden sorteo</option>
+	                                                <option value="dne">DNE</option>
+	                                                <option value="block">Bloque</option>
+	                                                <option value="unit">Subbloque</option>
+	                                                <option value="seat">Puesto</option>
+	                                                <option value="slotLabel">Asignación</option>
+	                                                <option value="rotationPosition">Posición real</option>
+	                                                <option value="ahead">MTE delante</option>
+	                                                <option value="behind">MTE detrás</option>
+	                                            </select>
+	                                            <button type="button" onClick={() => setRotationSort(prev => ({ ...prev, direction: prev.direction === 'desc' ? 'asc' : 'desc' }))} className="px-3 py-2 rounded-lg bg-slate-700 text-white text-[10px] font-bold shadow-sm hover:bg-slate-800 transition-colors">
+	                                                {rotationSort.direction === 'desc' ? 'Mayor a menor' : 'Menor a mayor'}
+	                                            </button>
 	                                        </div>
 	                                    </div>
 			                                    <div className="overflow-auto custom-scroll rounded-xl border border-gray-200 bg-white/60 max-h-[70vh]">
 			                                    <table className="rotation-table w-full text-left text-[11px] border-collapse">
 		                                        <thead className="bg-gray-100 text-gray-600 uppercase sticky top-0 z-10">
 	                                            <tr>
-		                                                <th className="p-2 w-16">Orden</th>
-		                                                <th className="p-2 w-28">DNE</th>
-		                                                <th className="p-2 w-24">Bloque</th>
-		                                                <th className="p-2 w-24">Unidad</th>
-		                                                <th className="p-2 w-24">Puesto</th>
+                                                <th className="p-2 w-20"><button type="button" onClick={() => handleRotationSort('order')} className="w-full text-left font-black">Orden sorteo {getRotationSortIcon('order')}</button></th>
+		                                                <th className="p-2 w-28"><button type="button" onClick={() => handleRotationSort('dne')} className="w-full text-left font-black">DNE {getRotationSortIcon('dne')}</button></th>
+		                                                <th className="p-2 w-24"><button type="button" onClick={() => handleRotationSort('block')} className="w-full text-left font-black">Bloque {getRotationSortIcon('block')}</button></th>
+                                                <th className="p-2 w-24"><button type="button" onClick={() => handleRotationSort('unit')} className="w-full text-left font-black">Subbloque {getRotationSortIcon('unit')}</button></th>
+		                                                <th className="p-2 w-24"><button type="button" onClick={() => handleRotationSort('seat')} className="w-full text-left font-black">Puesto {getRotationSortIcon('seat')}</button></th>
 	                                                <th className="p-2">Asignación</th>
-		                                                <th className="p-2 w-20 text-right">Delante</th>
+                                                <th className="p-2 w-24 text-right"><button type="button" onClick={() => handleRotationSort('rotationPosition')} className="w-full text-right font-black">Pos. real {getRotationSortIcon('rotationPosition')}</button></th>
+		                                                <th className="p-2 w-20 text-right"><button type="button" onClick={() => handleRotationSort('ahead')} className="w-full text-right font-black">Delante {getRotationSortIcon('ahead')}</button></th>
 	                                                <th className="p-2 text-right">Detrás</th>
 	                                            </tr>
 	                                        </thead>
-	                                        <tbody>
-	                                            {filteredRotationOrder.map((row, idx) => {
-	                                                const ahead = Math.max(0, row.order - 1);
-	                                                const behind = Math.max(0, generatedRotationOrder.length - row.order);
-	                                                const isSearchMatch = !!normalizedRotationSearch && searchedRotationSummary?.dne === row.dne && searchedRotationSummary?.order === row.order;
-	                                                return (
+		                                        <tbody>
+		                                            {sortedRotationOrder.map((row, idx) => {
+		                                                const ahead = row.ahead;
+		                                                const behind = row.behind;
+		                                                const rotationPosition = row.rotationPosition;
+		                                                const isSearchMatch = !!normalizedRotationSearch && searchedRotationSummary?.dne === row.dne && searchedRotationSummary?.order === row.order;
+		                                                return (
 	                                                <tr key={`${row.order}-${row.dne}-${idx}`} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${row.isWinningStart ? 'ring-1 ring-emerald-300 bg-emerald-50/60' : ''} ${isSearchMatch ? 'bg-amber-50/80 ring-1 ring-amber-300' : ''}`}>
 		                                                    <td className="p-2 align-top font-black text-slate-800">{row.order}</td>
-		                                                    <td className="p-2 align-top font-black text-emerald-700 rotation-wrap">{row.dne}</td>
+			                                                    <td className="p-2 align-top">
+			                                                        <button type="button" onClick={() => handleSelectRotationDne(row)} className="font-black text-emerald-700 rotation-wrap text-left hover:underline">
+			                                                            {row.dne}
+			                                                        </button>
+			                                                    </td>
 		                                                    <td className="p-2 align-top">Bloque {row.block}</td>
 		                                                    <td className="p-2 align-top">{row.unit}</td>
 		                                                    <td className="p-2 align-top">Puesto {row.seat}</td>
 		                                                    <td className="p-2 align-top text-gray-700 rotation-wrap">{row.slotLabel}{row.isWinningStart ? ' (Inicio sorteo)' : ''}</td>
+		                                                    <td className="p-2 align-top text-right font-bold text-slate-700">{rotationPosition}</td>
 		                                                    <td className="p-2 align-top text-right font-bold text-blue-700">{ahead}</td>
 		                                                    <td className="p-2 align-top text-right font-bold text-violet-700">{behind}</td>
 	                                                </tr>
 	                                            )})}
 	                                            {filteredRotationOrder.length === 0 && (
 	                                                <tr>
-	                                                    <td colSpan="8" className="p-4 text-center font-bold text-gray-500">No hay coincidencias para ese DNE.</td>
+		                                                    <td colSpan="9" className="p-4 text-center font-bold text-gray-500">No hay coincidencias para ese DNE.</td>
 	                                                </tr>
 	                                            )}
 	                                        </tbody>
@@ -2924,15 +3096,15 @@ th { background: #f3f4f6; text-align: center; }
 			                                <span className={`font-black px-2 py-0.5 rounded text-[10px] ${visionScheme.p} text-white rotation-wrap max-w-full`}>{visionBadgeLabel}</span>
 		                                </div>
                             </div>
-                            <p className="text-[11px] text-gray-600 mb-4">Proyección automática de posición, subbloque, subsubbloque y MTE delante para la unidad seleccionada.</p>
+                            <p className="text-[11px] text-gray-600 mb-4">Proyección automática de posición, subbloque, subsubbloque y MTE delante para la unidad seleccionada o para el DNE elegido desde el buscador.</p>
 	                            <div className="text-[11px] text-slate-700 font-bold mb-4 rotation-wrap">{visionHelperText}</div>
 	                            {!canUseSearchedVision && generalVisionMode === 'dne' && (
 		                                <div className="text-[10px] text-amber-700 font-bold mb-4">Busca un DNE valido para activar esa vista.</div>
 	                            )}
 		                            <div className="rotation-vision-grid">
-	                                {Array.from({ length: projectionYears }).map((_, stepOffset) => {
-                                    const pos = sequence[stepOffset % 13];
-                                    const contentForStep = getRotationBlockContent(stepOffset);
+		                                {Array.from({ length: projectionYears }).map((_, stepOffset) => {
+	                                    const pos = visionSequence[stepOffset % 13];
+	                                    const contentForStep = getRotationBlockContent(stepOffset);
 	                                    const flatOrder = contentForStep.flatMap(g => g.subs.map(num => `${g.label}${num}`));
 	                                    const internalIdx = flatOrder.indexOf(visionUnitId);
 	                                    const selectedGroupLabel = visionUnitId.charAt(0);
@@ -2941,9 +3113,10 @@ th { background: #f3f4f6; text-align: center; }
                                     const selectedGroupData = subBlockPos > 0 ? contentForStep[subBlockPos - 1] : null;
                                     const subSubInGroupPos = selectedGroupData ? (selectedGroupData.subs.indexOf(selectedSubNum) + 1) : 0;
                                     const subSubGlobalPos = internalIdx + 1;
-                                    const mPerBlock = globalMTE / 13;
-                                    const mPerSub = mPerBlock / 12;
-                                    const mteDelanteStep = Math.round(((pos - 1) * mPerBlock) + (internalIdx * mPerSub) + (mPerSub / 2));
+	                                    const searchedSeatPosition = Math.max(1, Number(searchedRotationSummary?.seat) || 1);
+	                                    const referenceSeatPosition = Math.max(1, Math.ceil(rotationSeatsPerUnit / 2));
+	                                    const seatPosition = generalVisionMode === 'dne' && canUseSearchedVision ? searchedSeatPosition : referenceSeatPosition;
+	                                    const mteDelanteStep = getRotationAheadCount(pos, visionUnitId, seatPosition, stepOffset);
                                     return (
 		                                        <div key={stepOffset} className={`p-3 rounded-xl border-2 flex flex-col items-center justify-between min-h-[148px] relative overflow-hidden bg-white transition-transform cursor-default ${visionScheme.b}`}>
 	                                            <div className={`absolute top-0 w-full h-1.5 ${visionScheme.p}`}></div>
@@ -2951,7 +3124,8 @@ th { background: #f3f4f6; text-align: center; }
 	                                            <span className={`text-sm md:text-base font-black mb-1 ${visionScheme.t}`}>Posición {pos}</span>
                                             <div className="text-[8px] text-gray-600 font-bold mb-2 text-center leading-tight">
     <div>Subbloque {subBlockPos}/3</div>
-    <div>Subsubbloque {subSubInGroupPos}/4 ({subSubGlobalPos}/12)</div>
+	    <div>Subsubbloque {subSubInGroupPos}/4 ({subSubGlobalPos}/12)</div>
+	    <div>{generalVisionMode === 'dne' && canUseSearchedVision ? `Puesto real ${seatPosition}/${rotationSeatsPerUnit}` : `Referencia media ${seatPosition}/${rotationSeatsPerUnit}`}</div>
 </div>
 	                                            <div className={`rounded px-2 py-1 text-center w-full shadow-inner ${visionScheme.l}`}>
                                                 <span className="block text-[8px] text-gray-500 uppercase font-black tracking-wider">MTE Delante</span>
@@ -2973,7 +3147,7 @@ th { background: #f3f4f6; text-align: center; }
 function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
     const [year, setYear] = useState(2027);
     const [rmStatus, setRmStatus] = useState('fuera');
-    const [calendarFilter, setCalendarFilter] = useState('todos');
+    const [calendarFilter] = useState('A');
     const [expandedGroups, setExpandedGroups] = useState(() => new Set());
     const [detailSortByGroup, setDetailSortByGroup] = useState({});
     const [periodAnalysisOpen, setPeriodAnalysisOpen] = useState(false);
@@ -3045,75 +3219,6 @@ function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
                         ...statsA
                     });
 
-                    for (let sub = 0; sub < 6; sub++) {
-                        const redSet = buildRedDaysSetBForScenario(year, group, sub);
-                        const statsB = computeAnnualBalance({
-                            year,
-                            groupShift: group,
-                            targetDays: scenarioTargetDays,
-                            vacationRanges: ranges,
-                            specificRestSet: redSet,
-                            workRule: 'rest_and_specific_only',
-                            includeVacationOnWork: true,
-                            rmDate,
-                            rmInside: rmStatus === 'dentro'
-                        });
-                        rows.push({
-                            id: `B-${vac.id}-${pfaIndex}-${group}-${sub}`,
-                            calendario: 'B',
-                            grupo: `G${group + 1}`,
-                            subgrupo: `S${sub + 1}`,
-                            ccr: '-',
-                            periodoC: '-',
-                            vacaciones: vac.label,
-                            pfa: pfa.label,
-                            compatible: true,
-                            overlapDays: 0,
-                            scenarioMTE: scenarioMTEBase / 6,
-                            scenarioPeriodMTE,
-                            scenarioVacId: vac.id,
-                            scenarioPfaIdx: pfaIndex,
-                            scenarioGroupShift: group,
-                            scenarioSubGroupIdx: sub,
-                            rmCoincideDescanso: !!(rmDayId && rmDate && (isBaseRestForGroup(rmDate, group) || redSet.has(rmDayId))),
-                            ...commonScenarioInfo,
-                            ...statsB
-                        });
-                    }
-
-                    const ccrFixedSet = buildCCRFixedDaysSet(year, group, ranges, 10, rmDate, rmStatus === 'dentro');
-                    const statsC = computeAnnualBalance({
-                        year,
-                        groupShift: group,
-                        targetDays: scenarioTargetDays,
-                        vacationRanges: ranges,
-                        specificRestSet: ccrFixedSet,
-                        workRule: 'rest_and_specific_only',
-                        includeVacationOnWork: true,
-                        rmDate,
-                        rmInside: rmStatus === 'dentro'
-                    });
-                    rows.push({
-                        id: `C-${vac.id}-${pfaIndex}-${group}`,
-                        calendario: 'C',
-                        grupo: `G${group + 1}`,
-                        subgrupo: '-',
-                        ccr: '-',
-                        periodoC: '-',
-                        vacaciones: vac.label,
-                        pfa: pfa.label,
-                        compatible: true,
-                        overlapDays: 0,
-                        scenarioMTE: scenarioMTEBase,
-                        scenarioPeriodMTE,
-                        scenarioVacId: vac.id,
-                        scenarioPfaIdx: pfaIndex,
-                        scenarioGroupShift: group,
-                        scenarioSubGroupIdx: 0,
-                        rmCoincideDescanso: !!(rmDayId && rmDate && (isBaseRestForGroup(rmDate, group) || ccrFixedSet.has(rmDayId))),
-                        ...commonScenarioInfo,
-                        ...statsC
-                    });
                 }
             });
         });
@@ -3122,7 +3227,6 @@ function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
     }, [year, autoLibranzasA, mtePerGroup, rmStatus]);
 
     const rows = useMemo(() => {
-        if (calendarFilter === 'todos') return allRows;
         return allRows.filter(r => r.calendario === calendarFilter);
     }, [allRows, calendarFilter]);
 
@@ -3199,7 +3303,7 @@ function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
             tipo: r.calendario,
             year,
             groupShift: r.scenarioGroupShift,
-            subGroupIdx: r.calendario === 'B' ? r.scenarioSubGroupIdx : 0,
+            subGroupIdx: 0,
             vacationRowId: r.scenarioVacId,
             pfaIdx: r.scenarioPfaIdx,
             rmStatus
@@ -3208,9 +3312,7 @@ function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
 
     const resumen = useMemo(() => {
         const byCal = {
-            A: { escenarios: 0, credito: 0, debito: 0, posiblesCredito: 0, posiblesDebito: 0, posiblesEquilibrio: 0, posiblesMteCredito: 0, posiblesMteDebito: 0, weightedCredito: 0, weightedDebito: 0, weightedGeneral: 0, totalMteEscenarios: 0, mediaCreditoEscenario: 0, mediaDebitoEscenario: 0, mediaGeneralEscenario: 0, mediaCreditoMte: 0, mediaDebitoMte: 0, mediaGeneralMte: 0 },
-            B: { escenarios: 0, credito: 0, debito: 0, posiblesCredito: 0, posiblesDebito: 0, posiblesEquilibrio: 0, posiblesMteCredito: 0, posiblesMteDebito: 0, weightedCredito: 0, weightedDebito: 0, weightedGeneral: 0, totalMteEscenarios: 0, mediaCreditoEscenario: 0, mediaDebitoEscenario: 0, mediaGeneralEscenario: 0, mediaCreditoMte: 0, mediaDebitoMte: 0, mediaGeneralMte: 0 },
-            C: { escenarios: 0, credito: 0, debito: 0, posiblesCredito: 0, posiblesDebito: 0, posiblesEquilibrio: 0, posiblesMteCredito: 0, posiblesMteDebito: 0, weightedCredito: 0, weightedDebito: 0, weightedGeneral: 0, totalMteEscenarios: 0, mediaCreditoEscenario: 0, mediaDebitoEscenario: 0, mediaGeneralEscenario: 0, mediaCreditoMte: 0, mediaDebitoMte: 0, mediaGeneralMte: 0 }
+            A: { escenarios: 0, credito: 0, debito: 0, posiblesCredito: 0, posiblesDebito: 0, posiblesEquilibrio: 0, posiblesMteCredito: 0, posiblesMteDebito: 0, weightedCredito: 0, weightedDebito: 0, weightedGeneral: 0, totalMteEscenarios: 0, mediaCreditoEscenario: 0, mediaDebitoEscenario: 0, mediaGeneralEscenario: 0, mediaCreditoMte: 0, mediaDebitoMte: 0, mediaGeneralMte: 0 }
         };
         allRows.forEach(r => {
             const scenarioMTE = r.scenarioMTE || 0;
@@ -3308,17 +3410,12 @@ function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
                     </div>
                     <div className="bg-white/70 rounded-lg border border-gray-200 px-3 py-2">
                         <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">Calendario</label>
-                        <select className="custom-select" value={calendarFilter} onChange={e => setCalendarFilter(e.target.value)}>
-                            <option value="todos">Todos</option>
-                            <option value="A">A</option>
-                            <option value="B">B</option>
-                            <option value="C">C</option>
-                        </select>
+                        <div className="custom-select bg-blue-50 text-blue-800 font-black text-center">A</div>
                     </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            <div className="grid grid-cols-1 gap-3 mb-4">
                 <div className="panel p-3 bg-white/60 border border-white/70">
                     <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -3346,85 +3443,17 @@ function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
                         </div>
                     </div>
                 </div>
-                <div className="panel p-3 bg-white/60 border border-white/70">
-                    <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                            <div className="text-[11px] font-bold uppercase text-gray-600">Resumen B</div>
-                            <div className="text-sm font-black text-blue-900">Escenarios: {resumen.B.escenarios}</div>
-                            <div className="text-[11px] text-green-700 font-bold">Escenarios con credito: {resumen.B.posiblesCredito}</div>
-                            <div className="text-[11px] text-red-700 font-bold">Escenarios con debito: {resumen.B.posiblesDebito}</div>
-                            <div className="text-[11px] text-gray-700 font-bold">Escenarios en equilibrio: {resumen.B.posiblesEquilibrio}</div>
-                            <div className="text-[11px] text-green-700 font-bold">Posible MTE con credito (plantilla): {Math.round(resumen.B.posiblesMteCredito)}</div>
-                            <div className="text-[11px] text-red-700 font-bold">Posible MTE con debito (plantilla): {Math.round(resumen.B.posiblesMteDebito)}</div>
-                            <div className="text-[11px] text-blue-700 font-bold">Media credito por escenario: {resumen.B.mediaCreditoEscenario.toFixed(2)}</div>
-                            <div className="text-[11px] text-blue-700 font-bold">Media debito por escenario: {resumen.B.mediaDebitoEscenario.toFixed(2)}</div>
-                            <div className="text-[11px] text-cyan-700 font-bold">Media general (cr+db) por escenario: {resumen.B.mediaGeneralEscenario.toFixed(2)}</div>
-                            <div className="text-[11px] text-indigo-700 font-bold">Media credito por MTE: {resumen.B.mediaCreditoMte.toFixed(2)}</div>
-                            <div className="text-[11px] text-indigo-700 font-bold">Media debito por MTE: {resumen.B.mediaDebitoMte.toFixed(2)}</div>
-                            <div className="text-[11px] text-violet-700 font-bold">Media general (cr+db) por MTE: {resumen.B.mediaGeneralMte.toFixed(2)}</div>
-                        </div>
-                        <div className="shrink-0 text-right">
-                            <div className="w-16 h-16 rounded-full border border-gray-300 ml-auto" style={{ background: donutStyleFor(resumen.B).background }}></div>
-                            <div className="text-[10px] font-bold text-gray-700 mt-2 space-y-0.5">
-                                <div><span className="text-green-700">Credito</span>: {donutStyleFor(resumen.B).pCred.toFixed(1)}%</div>
-                                <div><span className="text-red-700">Debito</span>: {donutStyleFor(resumen.B).pDeb.toFixed(1)}%</div>
-                                <div><span className="text-gray-600">Equilibrio</span>: {donutStyleFor(resumen.B).pEq.toFixed(1)}%</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div className="panel p-3 bg-white/60 border border-white/70">
-                    <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                            <div className="text-[11px] font-bold uppercase text-gray-600">Resumen C</div>
-                            <div className="text-sm font-black text-blue-900">Escenarios: {resumen.C.escenarios}</div>
-                            <div className="text-[11px] text-green-700 font-bold">Escenarios con credito: {resumen.C.posiblesCredito}</div>
-                            <div className="text-[11px] text-red-700 font-bold">Escenarios con debito: {resumen.C.posiblesDebito}</div>
-                            <div className="text-[11px] text-gray-700 font-bold">Escenarios en equilibrio: {resumen.C.posiblesEquilibrio}</div>
-                            <div className="text-[11px] text-green-700 font-bold">Posible MTE con credito (plantilla): {Math.round(resumen.C.posiblesMteCredito)}</div>
-                            <div className="text-[11px] text-red-700 font-bold">Posible MTE con debito (plantilla): {Math.round(resumen.C.posiblesMteDebito)}</div>
-                            <div className="text-[11px] text-blue-700 font-bold">Media credito por escenario: {resumen.C.mediaCreditoEscenario.toFixed(2)}</div>
-                            <div className="text-[11px] text-blue-700 font-bold">Media debito por escenario: {resumen.C.mediaDebitoEscenario.toFixed(2)}</div>
-                            <div className="text-[11px] text-cyan-700 font-bold">Media general (cr+db) por escenario: {resumen.C.mediaGeneralEscenario.toFixed(2)}</div>
-                            <div className="text-[11px] text-indigo-700 font-bold">Media credito por MTE: {resumen.C.mediaCreditoMte.toFixed(2)}</div>
-                            <div className="text-[11px] text-indigo-700 font-bold">Media debito por MTE: {resumen.C.mediaDebitoMte.toFixed(2)}</div>
-                            <div className="text-[11px] text-violet-700 font-bold">Media general (cr+db) por MTE: {resumen.C.mediaGeneralMte.toFixed(2)}</div>
-                        </div>
-                        <div className="shrink-0 text-right">
-                            <div className="w-16 h-16 rounded-full border border-gray-300 ml-auto" style={{ background: donutStyleFor(resumen.C).background }}></div>
-                            <div className="text-[10px] font-bold text-gray-700 mt-2 space-y-0.5">
-                                <div><span className="text-green-700">Credito</span>: {donutStyleFor(resumen.C).pCred.toFixed(1)}%</div>
-                                <div><span className="text-red-700">Debito</span>: {donutStyleFor(resumen.C).pDeb.toFixed(1)}%</div>
-                                <div><span className="text-gray-600">Equilibrio</span>: {donutStyleFor(resumen.C).pEq.toFixed(1)}%</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <div className="panel p-3 bg-white/60 border border-white/70 mb-4">
-                <div className="text-[11px] font-bold uppercase text-gray-600 mb-2">Posibles MTE con creditos o debitos por calendario</div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div className="text-[11px] font-bold uppercase text-gray-600 mb-2">Posibles MTE con creditos o debitos del calendario activo</div>
+                <div className="grid grid-cols-1 gap-2">
                     <div className="bg-white/85 rounded border border-red-200 p-3 text-center">
                         <div className="text-[11px] text-gray-600 uppercase font-bold">Calendario A</div>
                         <div className="text-[10px] text-green-700 uppercase font-bold mb-1">Credito</div>
                         <div className="text-3xl md:text-4xl font-black text-green-700 leading-none mb-2">{Math.round(resumen.A.posiblesMteCredito)}</div>
                         <div className="text-[10px] text-red-700 uppercase font-bold mb-1">Debito</div>
                         <div className="text-3xl md:text-4xl font-black text-red-700 leading-none">{Math.round(resumen.A.posiblesMteDebito)}</div>
-                    </div>
-                    <div className="bg-white/85 rounded border border-red-200 p-3 text-center">
-                        <div className="text-[11px] text-gray-600 uppercase font-bold">Calendario B</div>
-                        <div className="text-[10px] text-green-700 uppercase font-bold mb-1">Credito</div>
-                        <div className="text-3xl md:text-4xl font-black text-green-700 leading-none mb-2">{Math.round(resumen.B.posiblesMteCredito)}</div>
-                        <div className="text-[10px] text-red-700 uppercase font-bold mb-1">Debito</div>
-                        <div className="text-3xl md:text-4xl font-black text-red-700 leading-none">{Math.round(resumen.B.posiblesMteDebito)}</div>
-                    </div>
-                    <div className="bg-white/85 rounded border border-red-200 p-3 text-center">
-                        <div className="text-[11px] text-gray-600 uppercase font-bold">Calendario C</div>
-                        <div className="text-[10px] text-green-700 uppercase font-bold mb-1">Credito</div>
-                        <div className="text-3xl md:text-4xl font-black text-green-700 leading-none mb-2">{Math.round(resumen.C.posiblesMteCredito)}</div>
-                        <div className="text-[10px] text-red-700 uppercase font-bold mb-1">Debito</div>
-                        <div className="text-3xl md:text-4xl font-black text-red-700 leading-none">{Math.round(resumen.C.posiblesMteDebito)}</div>
                     </div>
                 </div>
             </div>
@@ -3472,7 +3501,7 @@ function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
                     </div>
                 )}
                 <div className="text-[10px] text-gray-500 mt-2">
-                    El valor mostrado es total por periodo, sin separar por grupo/subgrupo.
+                    El valor mostrado es total por periodo, sin separar por grupo.
                 </div>
             </div>
 
@@ -3481,13 +3510,13 @@ function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
                     Agrupado por debito/credito ({groupedRows.length} grupos)
                 </div>
                 <div className="text-[11px] text-gray-500 mb-3">
-                    Clic en cada grupo para ver grupos/subgrupos + vacaciones/PFA que generan ese resultado.
+                    Clic en cada grupo para ver vacaciones/PFA y grupo de descanso que generan ese resultado.
                 </div>
                 <div className="text-[11px] text-blue-700 mb-3 font-bold">
                     En el detalle abierto, haz clic en cualquier fila para abrir ese escenario en su calendario.
                 </div>
                 <div className="text-[11px] text-indigo-700 mb-3 font-bold">
-                    MTE periodo: total de MTE asociado al periodo Vacaciones+PFA, independiente del grupo/subgrupo.
+                    MTE periodo: total de MTE asociado al periodo Vacaciones+PFA, independiente del grupo.
                 </div>
 
                 <div className="space-y-2 overflow-auto max-h-[70vh] pr-1">
@@ -3532,7 +3561,6 @@ function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
                                                     onChange={e => setDetailSortByGroup(prev => ({ ...prev, [group.key]: e.target.value }))}
                                                 >
                                                     <option value="grupo_asc">Grupo</option>
-                                                    <option value="subgrupo_asc">Subgrupo</option>
                                                     <option value="vacaciones_asc">Vacaciones</option>
                                                     <option value="pfa_asc">PFA</option>
                                                 </select>
@@ -3543,7 +3571,6 @@ function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
                                                 <thead className="bg-gray-100">
                                                     <tr className="uppercase text-gray-600">
                                                         <th className="p-2">Grupo</th>
-                                                        <th className="p-2">Subgrupo</th>
                                                         <th className="p-2">Vacaciones</th>
                                                         <th className="p-2">PFA</th>
                                                         <th className="p-2">RM</th>
@@ -3563,7 +3590,6 @@ function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
                                                     {getSortedGroupItems(group).map((r, idx) => (
                                                         <tr key={r.id} onClick={() => handleOpenFromDetail(r)} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50/70 cursor-pointer`}>
                                                             <td className="p-2 font-semibold">{r.grupo}</td>
-                                                            <td className="p-2">{r.subgrupo}</td>
                                                             <td className="p-2">{r.vacaciones}</td>
                                                             <td className="p-2">{r.pfa}</td>
                                                             <td className="p-2">
@@ -3619,11 +3645,12 @@ function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
 function AppRouter() {
     const [view, setView] = useState('home');
     const [pendingScenario, setPendingScenario] = useState(null);
+    const [autoRotationTemplateAttempted, setAutoRotationTemplateAttempted] = useState(false);
     
     // ESTADO GLOBAL COMPLETO (Se inyecta en todo el motor)
     const defaultConfig = {
-        globalMTE: 2100, maxSolapamiento: 3,
-        // Pesos Calendario C
+	        globalMTE: 2100, rotationBlockSize: Math.round(2100 / 13), maxSolapamiento: 3,
+        // Pesos de referencia
         pesoC_0: 800, pesoC_1: 100, pesoC_2: 1500, pesoC_3: 1500,
         pesoC_4: 400, pesoC_5: 3000, pesoC_6: 10000, pesoC_7: 10000,
         pesoC_8: 3000, pesoC_9: 100, pesoC_10: 100, pesoC_11: 800,
@@ -3697,6 +3724,34 @@ function AppRouter() {
             setConfig(prev => lockJanuaryQuotaA(prev));
         }
     }, [config.c_0_0, config.c_0_1, config.c_0_2]);
+    useEffect(() => {
+        if (autoRotationTemplateAttempted) return;
+        if (Array.isArray(config.rotationDneList) && config.rotationDneList.length > 0) {
+            setAutoRotationTemplateAttempted(true);
+            return;
+        }
+        if (typeof fetch !== 'function' || typeof XLSX === 'undefined') return;
+        let cancelled = false;
+        const loadDefaultRotationTemplate = async () => {
+            try {
+                const response = await fetch('mtes.xlsx', { cache: 'no-store' });
+                if (!response.ok) throw new Error('fetch');
+                const buffer = await response.arrayBuffer();
+                const dneList = extractRotationDneListFromWorkbookData(buffer);
+                if (cancelled) return;
+                setConfig(prev => {
+                    if (Array.isArray(prev.rotationDneList) && prev.rotationDneList.length > 0) return prev;
+                    return applyRotationTemplateToConfig(prev, dneList, 'mtes.xlsx');
+                });
+            } catch (_) {
+                // Si el fichero no está disponible, seguimos sin bloquear la app.
+            } finally {
+                if (!cancelled) setAutoRotationTemplateAttempted(true);
+            }
+        };
+        loadDefaultRotationTemplate();
+        return () => { cancelled = true; };
+    }, [autoRotationTemplateAttempted, config.rotationDneList]);
     const saveConfig = useCallback((cfg) => {
         try {
             const normalizedConfig = normalizeAutoAMultipliers(lockJanuaryQuotaA({ ...defaultConfig, ...(cfg || {}) }));
@@ -3708,7 +3763,7 @@ function AppRouter() {
     }, [defaultConfig]);
     const handleOpenScenarioFromAnalisis = useCallback((scenario) => {
         if (!scenario || !scenario.tipo) return;
-        const nextView = scenario.tipo === 'A' ? 'calA' : (scenario.tipo === 'B' ? 'calB' : 'calC');
+        const nextView = 'calA';
         setPendingScenario(scenario);
         setView(nextView);
     }, []);
@@ -3720,8 +3775,6 @@ function AppRouter() {
     return (
         <div className="relative z-10 w-full h-full no-print">
             { view === 'calA' && <SimuladorEngine tipo="A" config={config} setConfig={setConfig} onBack={() => setView('home')} onGoAnalysis={() => setView('analisis')} initialScenario={pendingScenario} onInitialScenarioApplied={handleScenarioApplied} /> }
-            { view === 'calB' && <SimuladorEngine tipo="B" config={config} setConfig={setConfig} onBack={() => setView('home')} onGoAnalysis={() => setView('analisis')} initialScenario={pendingScenario} onInitialScenarioApplied={handleScenarioApplied} /> }
-            { view === 'calC' && <SimuladorEngine tipo="C" config={config} setConfig={setConfig} onBack={() => setView('home')} onGoAnalysis={() => setView('analisis')} initialScenario={pendingScenario} onInitialScenarioApplied={handleScenarioApplied} /> }
             { view === 'rotacion' && <SimuladorRotacion globalMTE={config.globalMTE} config={config} onBack={() => setView('home')} /> }
             { view === 'analisis' && <SimuladorAnalisis config={config} onBack={() => setView('home')} onOpenScenario={handleOpenScenarioFromAnalisis} /> }
             { view === 'ajustes' && <Ajustes config={config} setConfig={setConfig} onBack={() => setView('home')} onSaveConfig={saveConfig} /> }
@@ -3740,21 +3793,15 @@ function AppRouter() {
                         <input type="number" value={config.globalMTE} onChange={e => setConfig(prev => ({...prev, globalMTE: Number(e.target.value)}))} className="w-full text-center text-2xl font-black text-blue-700 bg-white border border-blue-200 rounded-lg py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-inner" />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 md:gap-6 max-w-7xl w-full pb-10 relative z-10">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 max-w-6xl w-full pb-10 relative z-10">
                         <div onClick={() => setView('calA')} className="panel rounded-2xl p-5 md:p-6 flex flex-col items-center text-center cursor-pointer border-t-8 border-t-blue-500 transform hover:-translate-y-1 transition-transform shadow-sm hover:shadow-lg">
                             <div className="text-4xl md:text-5xl mb-4">📅</div><h2 className="text-lg md:text-xl font-bold text-gray-800 mb-2">Calendario A</h2><p className="text-xs text-gray-600 font-medium flex-1">Simulador de días sueltos y créditos con desgaste dinámico por MTE precedente.</p><button className="mt-4 bg-blue-50/80 text-blue-700 font-bold py-2 w-full rounded-xl text-sm border border-blue-300/50 hover:bg-blue-100/80 transition-colors">Acceder</button>
-                        </div>
-                        <div onClick={() => setView('calB')} className="panel rounded-2xl p-5 md:p-6 flex flex-col items-center text-center cursor-pointer border-t-8 border-t-green-500 transform hover:-translate-y-1 transition-transform shadow-sm hover:shadow-lg">
-                            <div className="text-4xl md:text-5xl mb-4">📆</div><h2 className="text-lg md:text-xl font-bold text-gray-800 mb-2">Calendario B</h2><p className="text-xs text-gray-600 font-medium flex-1">Secuencia de licencias fijas (L-M, X, J-V) garantizadas matemáticamente.</p><button className="mt-4 bg-green-50/80 text-green-700 font-bold py-2 w-full rounded-xl text-sm border border-green-300/50 hover:bg-green-100/80 transition-colors">Acceder</button>
-                        </div>
-                        <div onClick={() => setView('calC')} className="panel rounded-2xl p-5 md:p-6 flex flex-col items-center text-center cursor-pointer border-t-8 border-t-purple-500 transform hover:-translate-y-1 transition-transform shadow-sm hover:shadow-lg">
-                            <div className="text-4xl md:text-5xl mb-4">🗓️</div><h2 className="text-lg md:text-xl font-bold text-gray-800 mb-2">Calendario C</h2><p className="text-xs text-gray-600 font-medium flex-1">Elección de quincenas con asignación en cascada y filtro de incompatibilidad.</p><button className="mt-4 bg-purple-50/80 text-purple-700 font-bold py-2 w-full rounded-xl text-sm border border-purple-300/50 hover:bg-purple-100/80 transition-colors">Acceder</button>
                         </div>
                         <div onClick={() => setView('rotacion')} className="panel rounded-2xl p-5 md:p-6 flex flex-col items-center text-center cursor-pointer border-t-8 border-t-indigo-500 transform hover:-translate-y-1 transition-transform shadow-sm hover:shadow-lg">
                             <div className="text-4xl md:text-5xl mb-4">🔄</div><h2 className="text-lg md:text-xl font-bold text-gray-800 mb-2">Rotación</h2><p className="text-xs text-gray-600 font-medium flex-1">Simulador predictivo a largo plazo con visión de trayectoria a 15 años vista.</p><button className="mt-4 bg-indigo-50/80 text-indigo-700 font-bold py-2 w-full rounded-xl text-sm border border-indigo-300/50 hover:bg-indigo-100/80 transition-colors">Acceder</button>
                         </div>
                         <div onClick={() => setView('analisis')} className="panel rounded-2xl p-5 md:p-6 flex flex-col items-center text-center cursor-pointer border-t-8 border-t-amber-500 transform hover:-translate-y-1 transition-transform shadow-sm hover:shadow-lg">
-                            <div className="text-4xl md:text-5xl mb-4">🔎</div><h2 className="text-lg md:text-xl font-bold text-gray-800 mb-2">Analisis</h2><p className="text-xs text-gray-600 font-medium flex-1">Analisis cruzado de credito/debito para A, B y C por grupos, subgrupos y escenarios de vacaciones/PFA.</p><button className="mt-4 bg-amber-50/80 text-amber-700 font-bold py-2 w-full rounded-xl text-sm border border-amber-300/50 hover:bg-amber-100/80 transition-colors">Acceder</button>
+                            <div className="text-4xl md:text-5xl mb-4">🔎</div><h2 className="text-lg md:text-xl font-bold text-gray-800 mb-2">Analisis</h2><p className="text-xs text-gray-600 font-medium flex-1">Analisis cruzado de crédito/débito del Calendario A por grupos y escenarios de vacaciones/PFA.</p><button className="mt-4 bg-amber-50/80 text-amber-700 font-bold py-2 w-full rounded-xl text-sm border border-amber-300/50 hover:bg-amber-100/80 transition-colors">Acceder</button>
                         </div>
                         <div onClick={() => setView('ajustes')} className="panel rounded-2xl p-5 md:p-6 flex flex-col items-center text-center cursor-pointer border-t-8 border-t-gray-600 transform hover:-translate-y-1 transition-transform shadow-sm hover:shadow-lg bg-white/70">
                             <div className="text-4xl md:text-5xl mb-4">⚙️</div><h2 className="text-lg md:text-xl font-bold text-gray-800 mb-2">Ajustes</h2><p className="text-xs text-gray-600 font-medium flex-1">Personaliza el motor base, cupos físicos y la presión de MTE por meses.</p><button className="mt-4 bg-gray-100 text-gray-700 font-bold py-2 w-full rounded-xl text-sm border border-gray-300/50 hover:bg-gray-200 transition-colors">Configurar</button>

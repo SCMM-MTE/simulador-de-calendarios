@@ -570,7 +570,7 @@ const buildCCRFixedDaysSet = (year, groupShift, vacationRanges, maxDays = 10, rm
 };
 
 // --- 3. MÓDULO DE AJUSTES GLOBALES ---
-function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
+const Ajustes = React.memo(function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
     const [showHelp, setShowHelp] = useState(false);
     const [saveStatus, setSaveStatus] = useState("");
     const showStatus = useCallback((msg) => {
@@ -1048,10 +1048,10 @@ function Ajustes({ config, setConfig, onBack, onSaveConfig }) {
             </div>
         </div>
     );
-}
+});
 
 // --- 4. COMPONENTE MES VISUAL (GRID) ---
-function Month({ tipo, monthIdx, year, groupShift, redDaysSet, getCupo, getCupoPAP, selectedDays, selectedPAPDays, papModeEnabled, onDayClick, onPapDayClick, isConfirmed, festivos, anchorMonday, sequence, getVacationStatus, getRMStatus, cyclesC, selectedCycleC }) {
+const Month = React.memo(function Month({ tipo, monthIdx, year, groupShift, redDaysSet, getCupo, getCupoPAP, selectedDays, selectedPAPDays, papModeEnabled, onDayClick, onPapDayClick, isConfirmed, festivos, anchorMonday, sequence, getVacationStatus, getRMStatus, cyclesC, selectedCycleC }) {
     const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
     const firstDayDate = new Date(year, monthIdx, 1);
     const firstDayWeekday = firstDayDate.getDay();
@@ -1146,10 +1146,10 @@ function Month({ tipo, monthIdx, year, groupShift, redDaysSet, getCupo, getCupoP
             </div>
         </div>
     );
-}
+});
 
 // --- 5. COMPONENTE SIMULADOR (CALENDARIOS A, B, C) ---
-function SimuladorEngine({ tipo, config, setConfig, onBack, onGoAnalysis, initialScenario, onInitialScenarioApplied }) {
+const SimuladorEngine = React.memo(function SimuladorEngine({ tipo, config, setConfig, onBack, onGoAnalysis, initialScenario, onInitialScenarioApplied }) {
     const [year, setYear] = useState(2027);
     const [block, setBlock] = useState(1);
     const [subBlockIdx, setSubBlockIdx] = useState(0);
@@ -1906,7 +1906,7 @@ function SimuladorEngine({ tipo, config, setConfig, onBack, onGoAnalysis, initia
     const allowedCreditsVisual = creditsEnabled ? maxCredits : 0;
     const currentCounts = useMemo(() => getCounts(selectedDays), [selectedDays, getCounts]);
 
-    const handleSelectPeriodC = (cycleObj) => {
+    const handleSelectPeriodC = useCallback((cycleObj) => {
         if (cycleObj.isBlocked) return; 
         if (cycleObj.overlapCount > config.maxSolapamiento) {
             alert(`🚫 OPERACIÓN DENEGADA\n\nSolapa en ${cycleObj.overlapCount} días con tus Vacaciones.\nLímite: ${config.maxSolapamiento} días.`);
@@ -1921,9 +1921,9 @@ function SimuladorEngine({ tipo, config, setConfig, onBack, onGoAnalysis, initia
             }));
             if (cycleObj.overlapCount > 0) alert(`? ACEPTADO\nTiene un solapamiento de ${cycleObj.overlapCount} días.`);
         }
-    };
+    }, [config.maxSolapamiento, year]);
 
-    const handleDayClick = (m, d, esSD, esF, isDescanso, isVacation, isRMInside = false) => {
+    const handleDayClick = useCallback((m, d, esSD, esF, isDescanso, isVacation, isRMInside = false) => {
         if (tipo === 'B' || tipo === 'C' || isConfirmed || isDescanso || isVacation || isRMInside) return; 
         const dayId = `${m}-${d}`;
         const isSelected = selectedDaysSet.has(dayId);
@@ -1938,9 +1938,9 @@ function SimuladorEngine({ tipo, config, setConfig, onBack, onGoAnalysis, initia
             }
             else alert(`Límite alcanzado. Máximo ${REQUIRED_LAB_DAYS_A} laborables fijos + ${allowedCredits} créditos.`);
         }
-    };
+    }, [tipo, isConfirmed, selectedDaysSet, creditsEnabled, maxCredits, selectedDays, getCounts]);
 
-    const handlePAPDayClick = (m, d, dayOfWeek, isBlocked, papCupoBase) => {
+    const handlePAPDayClick = useCallback((m, d, dayOfWeek, isBlocked, papCupoBase) => {
         const dayId = `${m}-${d}`;
         if (selectedPAPDaysSet.has(dayId)) {
             setSelectedPAPDays(prev => prev.filter(id => id !== dayId));
@@ -1956,7 +1956,7 @@ function SimuladorEngine({ tipo, config, setConfig, onBack, onGoAnalysis, initia
             return;
         }
         setSelectedPAPDays(prev => [...prev, dayId]);
-    };
+    }, [selectedPAPDaysSet, selectedPAPDays.length, papLimit]);
 
     return (
         <div className="flex flex-col lg:flex-row h-auto min-h-screen lg:min-h-0 lg:h-screen w-full p-2 lg:p-3 gap-3 box-border bg-transparent relative z-10 no-print">
@@ -2284,7 +2284,7 @@ function SimuladorEngine({ tipo, config, setConfig, onBack, onGoAnalysis, initia
             </div>
         </div>
     );
-}
+});
 
 // ==========================================
 // COMPONENTE: SIMULADOR ROTACIÓN DINÁMICA
@@ -3174,7 +3174,7 @@ th { background: #f3f4f6; text-align: center; }
     );
 }
 
-function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
+const SimuladorAnalisis = React.memo(function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
     const [year, setYear] = useState(2027);
     const [rmStatus, setRmStatus] = useState('fuera');
     const [calendarFilter] = useState('A');
@@ -3667,7 +3667,7 @@ function SimuladorAnalisis({ config, onBack, onOpenScenario }) {
             </div>
         </div>
     );
-}
+});
 
 // ==========================================
 // ROUTER PRINCIPAL (HOME Y ESTADOS GLOBALES)
@@ -3848,4 +3848,3 @@ root.render(<AppRouter />);
 </script>
 </body>
 </html>
-
