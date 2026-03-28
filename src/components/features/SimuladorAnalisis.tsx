@@ -10,13 +10,16 @@ import { Button } from '@/components/common/Button';
 import { ISimulatorResult } from '@/lib/types/calendar';
 import clsx from 'clsx';
 
-const SCENARIO_COLORS = {
+const SCENARIO_TYPES = ['A', 'B', 'C'] as const;
+type ScenarioType = typeof SCENARIO_TYPES[number];
+
+const SCENARIO_COLORS: Record<ScenarioType, string> = {
   A: 'text-red-600 bg-red-50 border-red-200',
   B: 'text-blue-600 bg-blue-50 border-blue-200',
   C: 'text-green-600 bg-green-50 border-green-200',
 };
 
-const CHART_COLORS = {
+const CHART_COLORS: Record<string, string> = {
   laboral: '#3b82f6',
   sabado: '#f59e0b',
   domingo: '#ef4444',
@@ -25,15 +28,85 @@ const CHART_COLORS = {
   descanso: '#6b7280',
 };
 
+// --- Sub-components for refactoring ---
+
+function ScenarioSummaryCard({ type, result }: { type: ScenarioType; result: ISimulatorResult | undefined }) {
+  if (!result) return null;
+
+  return (
+    <Card padding="md" className={SCENARIO_COLORS[type]}>
+      <div className="text-center">
+        <p className="text-xs font-bold uppercase mb-1">Calendario {type}</p>
+        <p className="text-2xl font-black">{result.totalDays}</p>
+        <p className="text-xs text-gray-600 mt-1">
+          {result.assignedDays} asignados ({((result.utilizationRate || 0) * 100).toFixed(1)}%)
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+function ScenarioPieChartPanel({ type, data }: { type: ScenarioType; data: any[] | undefined }) {
+  return (
+    <Panel title={`Calendario ${type}`} color="default" collapsible={false}>
+      {data && data.length > 0 ? (
+        <ResponsiveContainer width="100%" height={250}>
+          <PieChart>
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              innerRadius={50}
+              outerRadius={90}
+              paddingAngle={2}
+              dataKey="value"
+            >
+              {data.map((entry, idx) => (
+                <Cell
+                  key={`cell-${idx}`}
+                  fill={CHART_COLORS[entry.name as keyof typeof CHART_COLORS] || '#999'}
+                />
+              ))}
+            </Pie>
+            <Tooltip />
+          </PieChart>
+        </ResponsiveContainer>
+      ) : (
+        <p className="text-center text-gray-500 py-8">No hay datos disponibles</p>
+      )}
+
+      {/* Legend */}
+      <div className="mt-4 space-y-2 text-xs">
+        {data?.map((entry, idx) => (
+          <div key={idx} className="flex items-center gap-2">
+            <div
+              className="w-3 h-3 rounded-full"
+              style={{
+                backgroundColor:
+                  CHART_COLORS[entry.name as keyof typeof CHART_COLORS] || '#999',
+              }}
+            ></div>
+            <span className="font-medium">{entry.name}:</span>
+            <span className="font-bold">{entry.value}</span>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+
+// --- Main Component ---
+
 export function SimuladorAnalisis() {
   const { results } = useSimulatorStore();
   const { config } = useConfigStore();
 
   // Calculate summary data for each scenario
   const scenarioData = useMemo(() => {
-    const scenarios: { [key: string]: ISimulatorResult & { type: 'A' | 'B' | 'C' } } = {};
+    const scenarios: { [key in ScenarioType]?: ISimulatorResult & { type: ScenarioType } } = {};
 
-    (['A', 'B', 'C'] as const).forEach(type => {
+    SCENARIO_TYPES.forEach(type => {
       if (results[type]) {
         scenarios[type] = { ...results[type], type };
       }
@@ -44,50 +117,31 @@ export function SimuladorAnalisis() {
 
   // Prepare chart data for distribution
   const distributionData = useMemo(() => {
-    const data: {
-      name: string;
-      laboral: number;
-      sabado: number;
-      domingo: number;
-      festivo: number;
-      vacacion: number;
-      descanso: number;
-    }[] = [];
-
-    (['A', 'B', 'C'] as const).forEach(type => {
+    return SCENARIO_TYPES.map(type => {
       const result = scenarioData[type];
-      if (result?.entries) {
-        const counts = {
-          laboral: 0,
-          sabado: 0,
-          domingo: 0,
-          festivo: 0,
-          vacacion: 0,
-          descanso: 0,
-        };
+      if (!result?.entries) return null;
 
-        result.entries.forEach(entry => {
-          const dayType = entry.dayType as keyof typeof counts;
-          if (dayType in counts) {
-            counts[dayType]++;
-          }
-        });
+      const counts = {
+        laboral: 0, sabado: 0, domingo: 0, festivo: 0, vacacion: 0, descanso: 0,
+      };
 
-        data.push({
-          name: `Cal. ${type}`,
-          ...counts,
-        });
+      result.entries.forEach(entry => {
+        const dayType = entry.dayType as keyof typeof counts;
+        if (dayType in counts) {
+          counts[dayType]++;
+        }
       }
-    });
+    );
 
-    return data;
+      return { name: `Cal. ${type}`, ...counts };
+    }).filter(Boolean);
   }, [scenarioData]);
 
   // Prepare pie chart data for each scenario
   const pieData = useMemo(() => {
-    const data: { [key: string]: any[] } = {};
+    const data: { [key in ScenarioType]?: any[] } = {};
 
-    (['A', 'B', 'C'] as const).forEach(type => {
+    SCENARIO_TYPES.forEach(type => {
       const result = scenarioData[type];
       if (result?.entries) {
         const counts: { [key: string]: number } = {};
@@ -110,7 +164,7 @@ export function SimuladorAnalisis() {
   const handleExportAnalysis = () => {
     const csv = [
       ['Escenario', 'Total Días', 'Asignados', 'Utilización', 'Presión Promedio'].join(','),
-      ...(['A', 'B', 'C'] as const).map(type => {
+      ...SCENARIO_TYPES.map(type => {
         const result = scenarioData[type];
         if (!result) return '';
         return [
@@ -138,22 +192,9 @@ export function SimuladorAnalisis() {
     <div className="space-y-6">
       {/* Top Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {(['A', 'B', 'C'] as const).map(type => {
-          const result = scenarioData[type];
-          if (!result) return null;
-
-          return (
-            <Card key={type} padding="md" className={SCENARIO_COLORS[type]}>
-              <div className="text-center">
-                <p className="text-xs font-bold uppercase mb-1">Calendario {type}</p>
-                <p className="text-2xl font-black">{result.totalDays}</p>
-                <p className="text-xs text-gray-600 mt-1">
-                  {result.assignedDays} asignados ({((result.utilizationRate || 0) * 100).toFixed(1)}%)
-                </p>
-              </div>
-            </Card>
-          );
-        })}
+        {SCENARIO_TYPES.map(type => (
+          <ScenarioSummaryCard key={type} type={type} result={scenarioData[type]} />
+        ))}
       </div>
 
       {/* Bar Chart - Distribution Comparison */}
@@ -176,51 +217,8 @@ export function SimuladorAnalisis() {
 
       {/* Pie Charts */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {(['A', 'B', 'C'] as const).map(type => (
-          <Panel key={type} title={`Calendario ${type}`} color="default" collapsible={false}>
-            {pieData[type] && pieData[type].length > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie
-                    data={pieData[type]}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={90}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {pieData[type].map((entry, idx) => (
-                      <Cell
-                        key={`cell-${idx}`}
-                        fill={CHART_COLORS[entry.name as keyof typeof CHART_COLORS] || '#999'}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-center text-gray-500 py-8">No hay datos disponibles</p>
-            )}
-
-            {/* Legend */}
-            <div className="mt-4 space-y-2 text-xs">
-              {pieData[type]?.map((entry, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <div
-                    className="w-3 h-3 rounded-full"
-                    style={{
-                      backgroundColor:
-                        CHART_COLORS[entry.name as keyof typeof CHART_COLORS] || '#999',
-                    }}
-                  ></div>
-                  <span className="font-medium">{entry.name}:</span>
-                  <span className="font-bold">{entry.value}</span>
-                </div>
-              ))}
-            </div>
-          </Panel>
+        {SCENARIO_TYPES.map(type => (
+          <ScenarioPieChartPanel key={type} type={type} data={pieData[type]} />
         ))}
       </div>
 
@@ -231,7 +229,7 @@ export function SimuladorAnalisis() {
             <thead>
               <tr className="bg-gray-100 border-b border-gray-300">
                 <th className="text-left py-2 px-3 font-bold">Métrica</th>
-                {(['A', 'B', 'C'] as const).map(type => (
+                {SCENARIO_TYPES.map(type => (
                   <th key={type} className="text-center py-2 px-3 font-bold">
                     Cal. {type}
                   </th>
@@ -239,15 +237,10 @@ export function SimuladorAnalisis() {
               </tr>
             </thead>
             <tbody>
-              {[
-                { label: 'Total de Días', key: 'totalDays' },
-                { label: 'Días Asignados', key: 'assignedDays' },
-                { label: 'Utilización', key: 'utilizationRate', format: (v: number) => `${(v * 100).toFixed(2)}%` },
-                { label: 'Presión Promedio', key: 'averagePressure', format: (v: number) => (v / 10).toFixed(2) },
-              ].map((row, idx) => (
+              {comparisonTableRows.map((row, idx) => (
                 <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                   <td className="py-2 px-3 font-medium">{row.label}</td>
-                  {(['A', 'B', 'C'] as const).map(type => {
+                  {SCENARIO_TYPES.map(type => {
                     const result = scenarioData[type];
                     const value = result ? (result[row.key as keyof typeof result] as number) : 0;
                     const formatted = row.format ? row.format(value) : value;
@@ -268,7 +261,7 @@ export function SimuladorAnalisis() {
       {/* Group Distribution Analysis */}
       <Panel title="👥 Distribución por Grupo (si aplica)" color="default" collapsible={true}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {(['A', 'B', 'C'] as const).map(type => {
+          {SCENARIO_TYPES.map(type => {
             const result = scenarioData[type];
             if (!result?.groupDistribution) return null;
 
@@ -278,7 +271,7 @@ export function SimuladorAnalisis() {
                 {Object.entries(result.groupDistribution).map(([group, count]) => (
                   <div key={group} className="flex justify-between items-center py-1">
                     <span className="text-sm text-gray-700">{group}</span>
-                    <span className="font-bold text-blue-700">{count}</span>
+                    <span className="font-bold text-blue-700">{count as number}</span>
                   </div>
                 ))}
               </div>
