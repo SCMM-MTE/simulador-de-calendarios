@@ -104,6 +104,15 @@ const ROTATION_GROUPS = ['A', 'B', 'C'];
 const ROTATION_SUBS = [1, 2, 3, 4];
 const ALL_ROTATION_UNITS = ROTATION_GROUPS.flatMap(g => ROTATION_SUBS.map(n => `${g}${n}`));
 const DEFAULT_ROTATION_ASSIGNMENT_UNIT_SEQUENCE = ['A1', 'B1', 'C1', 'A2', 'B2', 'C2', 'A3', 'B3', 'C3', 'A4', 'B4', 'C4'];
+const DEFAULT_ROTATION_BLOCK_FILL_SEQUENCE = Array.from({ length: 13 }, (_, idx) => idx + 1);
+const DEFAULT_ROTATION_SUBBLOCK_FILL_SEQUENCE = [...ROTATION_GROUPS];
+const DEFAULT_ROTATION_SUBSUBBLOCK_FILL_SEQUENCE = [...ROTATION_SUBS];
+const DEFAULT_ROTATION_FILL_PRIORITY = ['block', 'group', 'sub'];
+const ROTATION_FILL_DIMENSION_LABELS = {
+    block: 'Bloque',
+    group: 'Subbloque',
+    sub: 'Subsubbloque'
+};
 const buildRotationSequence = (startPos = 1) => {
     const idx = ROTATION_BASE_SEQUENCE.indexOf(Number(startPos));
     if (idx === -1) return ROTATION_BASE_SEQUENCE;
@@ -142,6 +151,24 @@ const getAutoPriorityMultiplierA = (cfg, monthIdx) => {
     if (legacyValue != null) return legacyValue;
     return segment.defaultValue;
 };
+const normalizeOrderedSequence = (sequence, allowedValues) => {
+    const allowed = Array.isArray(allowedValues) ? allowedValues : [];
+    const incoming = Array.isArray(sequence) ? sequence : [];
+    const unique = [];
+    incoming.forEach(value => {
+        if (!allowed.includes(value) || unique.includes(value)) return;
+        unique.push(value);
+    });
+    allowed.forEach(value => {
+        if (!unique.includes(value)) unique.push(value);
+    });
+    return unique.slice(0, allowed.length);
+};
+const normalizeRotationBlockFillSequence = (sequence) => normalizeOrderedSequence(sequence, DEFAULT_ROTATION_BLOCK_FILL_SEQUENCE);
+const normalizeRotationSubblockFillSequence = (sequence) => normalizeOrderedSequence(sequence, DEFAULT_ROTATION_SUBBLOCK_FILL_SEQUENCE);
+const normalizeRotationSubsubblockFillSequence = (sequence) => normalizeOrderedSequence(sequence, DEFAULT_ROTATION_SUBSUBBLOCK_FILL_SEQUENCE);
+const normalizeRotationFillPriority = (priority) => normalizeOrderedSequence(priority, DEFAULT_ROTATION_FILL_PRIORITY);
+const getRotationFillDimensionLabel = (key) => ROTATION_FILL_DIMENSION_LABELS[key] || key;
 const normalizeAutoAMultipliers = (cfg = {}) => {
     const next = { ...cfg };
     AUTO_A_PROFILE_SEGMENTS.forEach(segment => {
@@ -157,7 +184,19 @@ const normalizeAutoAMultipliers = (cfg = {}) => {
     for (let monthIdx = 0; monthIdx < 12; monthIdx++) {
         next[`multA_${monthIdx}`] = roundToOneDecimal(getAutoPriorityMultiplierA(next, monthIdx));
     }
-    next.rotationUnitSequence = normalizeRotationUnitSequence(next.rotationUnitSequence);
+    next.rotationBlockFillSequence = normalizeRotationBlockFillSequence(next.rotationBlockFillSequence);
+    next.rotationSubblockFillSequence = normalizeRotationSubblockFillSequence(
+        next.rotationSubblockFillSequence ?? deriveRotationSubblockFillSequence(next.rotationUnitSequence)
+    );
+    next.rotationSubsubblockFillSequence = normalizeRotationSubsubblockFillSequence(
+        next.rotationSubsubblockFillSequence ?? deriveRotationSubsubblockFillSequence(next.rotationUnitSequence)
+    );
+    next.rotationFillPriority = normalizeRotationFillPriority(next.rotationFillPriority);
+    next.rotationUnitSequence = buildRotationUnitSequence(
+        next.rotationSubblockFillSequence,
+        next.rotationSubsubblockFillSequence,
+        next.rotationFillPriority
+    );
     return next;
 };
 const normalizeRotationUnitSequence = (sequence) => {
@@ -171,6 +210,36 @@ const normalizeRotationUnitSequence = (sequence) => {
         if (!unique.includes(unit)) unique.push(unit);
     });
     return unique.slice(0, ALL_ROTATION_UNITS.length);
+};
+const deriveRotationSubblockFillSequence = (sequence) => {
+    const units = normalizeRotationUnitSequence(sequence);
+    return normalizeRotationSubblockFillSequence(units.map(unit => String(unit || '').charAt(0)).filter(Boolean));
+};
+const deriveRotationSubsubblockFillSequence = (sequence) => {
+    const units = normalizeRotationUnitSequence(sequence);
+    return normalizeRotationSubsubblockFillSequence(
+        units
+            .map(unit => Number.parseInt(String(unit || '').slice(1), 10))
+            .filter(value => Number.isFinite(value))
+    );
+};
+const buildRotationUnitSequence = (
+    groupSequence = DEFAULT_ROTATION_SUBBLOCK_FILL_SEQUENCE,
+    subSequence = DEFAULT_ROTATION_SUBSUBBLOCK_FILL_SEQUENCE,
+    fillPriority = DEFAULT_ROTATION_FILL_PRIORITY
+) => {
+    const normalizedGroups = normalizeRotationSubblockFillSequence(groupSequence);
+    const normalizedSubs = normalizeRotationSubsubblockFillSequence(subSequence);
+    const normalizedPriority = normalizeRotationFillPriority(fillPriority);
+    const groupPriority = normalizedPriority.indexOf('group');
+    const subPriority = normalizedPriority.indexOf('sub');
+    const units = [];
+    if (groupPriority !== -1 && subPriority !== -1 && groupPriority < subPriority) {
+        normalizedSubs.forEach(sub => normalizedGroups.forEach(group => units.push(`${group}${sub}`)));
+        return units;
+    }
+    normalizedGroups.forEach(group => normalizedSubs.forEach(sub => units.push(`${group}${sub}`)));
+    return units;
 };
 const distributeIntegerBuckets = (total, bucketCount) => {
     const safeTotal = Math.max(0, Math.round(Number(total) || 0));
@@ -249,6 +318,59 @@ const buildRotationAssignmentSlots = (totalMte, unitSequence = DEFAULT_ROTATION_
     }
     return slots;
 };
+const buildRotationAssignmentSlotsByFillOrder = (
+    totalMte,
+    {
+        unitSequence = DEFAULT_ROTATION_ASSIGNMENT_UNIT_SEQUENCE,
+        blockSequence = DEFAULT_ROTATION_BLOCK_FILL_SEQUENCE,
+        groupSequence = DEFAULT_ROTATION_SUBBLOCK_FILL_SEQUENCE,
+        subSequence = DEFAULT_ROTATION_SUBSUBBLOCK_FILL_SEQUENCE,
+        fillPriority = DEFAULT_ROTATION_FILL_PRIORITY
+    } = {}
+) => {
+    const normalizedTotal = Math.max(0, Number(totalMte) || 0);
+    const slots = [];
+    if (normalizedTotal <= 0) return slots;
+    const normalizedSequence = normalizeRotationUnitSequence(unitSequence);
+    const normalizedBlocks = normalizeRotationBlockFillSequence(blockSequence);
+    const normalizedGroups = normalizeRotationSubblockFillSequence(groupSequence);
+    const normalizedSubs = normalizeRotationSubsubblockFillSequence(subSequence);
+    const normalizedPriority = normalizeRotationFillPriority(fillPriority);
+    const seatsPerUnit = Math.ceil(normalizedTotal / (13 * normalizedSequence.length));
+    const dimensionValues = {
+        block: normalizedBlocks,
+        group: normalizedGroups,
+        sub: normalizedSubs
+    };
+    const iterateFillOrder = (visitor) => {
+        const walk = (priorityIndex, state) => {
+            if (priorityIndex < 0) {
+                visitor(state);
+                return;
+            }
+            const key = normalizedPriority[priorityIndex];
+            const values = dimensionValues[key] || [];
+            values.forEach(value => {
+                walk(priorityIndex - 1, { ...state, [key]: value });
+            });
+        };
+        walk(normalizedPriority.length - 1, {});
+    };
+    for (let seat = 1; seat <= seatsPerUnit; seat++) {
+        iterateFillOrder(({ block, group, sub }) => {
+            const unit = `${group}${sub}`;
+            if (!normalizedSequence.includes(unit)) return;
+            slots.push({
+                block,
+                unit,
+                seat,
+                label: `Bloque ${block} Â· ${unit} Â· Puesto ${seat}`
+            });
+        });
+        if (slots.length >= normalizedTotal) return slots.slice(0, normalizedTotal);
+    }
+    return slots.slice(0, normalizedTotal);
+};
 
 const VACATION_DATA = [
     { id: 1, label: "16 Jun - 15 Jul", weight: 0.20, summer: { start: {d:16, m:5}, end: {d:15, m:6} }, pfa: [{ label: "18 Nov - 8 Dic", weight: 0.10, start: {d:18, m:10}, end: {d:8, m:11} }, { label: "26 Oct - 15 Nov", weight: 0.10, start: {d:26, m:9}, end: {d:15, m:10} }] },
@@ -300,6 +422,101 @@ const Modal = ({ title, onClose, children, maxWidth = "max-w-4xl" }) => (
         </div>
     </div>
 );
+
+const RotationFillOrderEditor = React.memo(function RotationFillOrderEditor({ config, setConfig, title = 'Orden de relleno' }) {
+    const blockSequence = useMemo(() => normalizeRotationBlockFillSequence(config?.rotationBlockFillSequence), [config?.rotationBlockFillSequence]);
+    const subblockSequence = useMemo(() => normalizeRotationSubblockFillSequence(config?.rotationSubblockFillSequence), [config?.rotationSubblockFillSequence]);
+    const subsubblockSequence = useMemo(() => normalizeRotationSubsubblockFillSequence(config?.rotationSubsubblockFillSequence), [config?.rotationSubsubblockFillSequence]);
+    const fillPriority = useMemo(() => normalizeRotationFillPriority(config?.rotationFillPriority), [config?.rotationFillPriority]);
+    const unitSequence = useMemo(() => buildRotationUnitSequence(subblockSequence, subsubblockSequence, fillPriority), [subblockSequence, subsubblockSequence, fillPriority]);
+    const applyRotationOrderUpdate = useCallback((producer) => {
+        if (typeof setConfig !== 'function') return;
+        setConfig(prev => normalizeAutoAMultipliers(producer(prev || {})));
+    }, [setConfig]);
+    const moveSequenceItem = useCallback((configKey, normalizer, fromIdx, direction) => {
+        applyRotationOrderUpdate(prev => {
+            const current = normalizer(prev?.[configKey]);
+            const toIdx = fromIdx + direction;
+            if (toIdx < 0 || toIdx >= current.length) return prev;
+            const next = [...current];
+            const tmp = next[fromIdx];
+            next[fromIdx] = next[toIdx];
+            next[toIdx] = tmp;
+            return { ...prev, [configKey]: next };
+        });
+    }, [applyRotationOrderUpdate]);
+    const handlePriorityChange = useCallback((slotIdx, nextKey) => {
+        applyRotationOrderUpdate(prev => {
+            const current = normalizeRotationFillPriority(prev?.rotationFillPriority);
+            const withoutSelected = current.filter(key => key !== nextKey);
+            withoutSelected.splice(slotIdx, 0, nextKey);
+            return { ...prev, rotationFillPriority: withoutSelected };
+        });
+    }, [applyRotationOrderUpdate]);
+    const resetRotationOrder = useCallback(() => {
+        applyRotationOrderUpdate(prev => ({
+            ...prev,
+            rotationBlockFillSequence: DEFAULT_ROTATION_BLOCK_FILL_SEQUENCE,
+            rotationSubblockFillSequence: DEFAULT_ROTATION_SUBBLOCK_FILL_SEQUENCE,
+            rotationSubsubblockFillSequence: DEFAULT_ROTATION_SUBSUBBLOCK_FILL_SEQUENCE,
+            rotationFillPriority: DEFAULT_ROTATION_FILL_PRIORITY
+        }));
+    }, [applyRotationOrderUpdate]);
+    const renderSequenceEditor = (label, configKey, items, normalizer, formatValue) => (
+        <div className="bg-white/75 border border-slate-200 rounded-xl p-3">
+            <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="text-[10px] font-black text-slate-700 uppercase">{label}</div>
+                <div className="text-[10px] text-slate-500">{items.length} posiciones</div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+                {items.map((value, idx) => (
+                    <div key={`${configKey}-${value}-${idx}`} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
+                        <span className="text-[10px] font-black text-slate-500">{idx + 1}</span>
+                        <span className="min-w-[2rem] text-center text-[11px] font-black text-slate-800">{formatValue(value)}</span>
+                        <button onClick={() => moveSequenceItem(configKey, normalizer, idx, -1)} disabled={idx === 0} className={`px-1.5 py-0.5 rounded text-[10px] font-black ${idx === 0 ? 'bg-gray-200 text-gray-400' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>‹</button>
+                        <button onClick={() => moveSequenceItem(configKey, normalizer, idx, 1)} disabled={idx === items.length - 1} className={`px-1.5 py-0.5 rounded text-[10px] font-black ${idx === items.length - 1 ? 'bg-gray-200 text-gray-400' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>›</button>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                    <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">{title}</h4>
+                    <p className="text-[11px] text-slate-600 mt-1">Decide qué se consume antes dentro de cada puesto: bloque, subbloque o subsubbloque.</p>
+                </div>
+                <button onClick={resetRotationOrder} className="px-3 py-1.5 bg-white text-slate-700 border border-slate-300 rounded-lg text-[10px] font-bold hover:bg-slate-100 transition-colors self-start">Restaurar orden</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {fillPriority.map((currentKey, idx) => (
+                    <div key={`priority-${idx}`} className="bg-white/75 border border-slate-200 rounded-xl p-3">
+                        <label className="text-[10px] font-black text-slate-700 uppercase block mb-2">{idx + 1}º en llenarse</label>
+                        <select className="custom-select py-2 text-sm font-bold text-slate-700" value={currentKey} onChange={(e) => handlePriorityChange(idx, e.target.value)}>
+                            {DEFAULT_ROTATION_FILL_PRIORITY.map(optionKey => (
+                                <option key={optionKey} value={optionKey}>{getRotationFillDimensionLabel(optionKey)}</option>
+                            ))}
+                        </select>
+                    </div>
+                ))}
+            </div>
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 py-2 text-[11px] text-indigo-800">
+                Prioridad activa: <b>{fillPriority.map((key, idx) => `${idx + 1}. ${getRotationFillDimensionLabel(key)}`).join('  ·  ')}</b>. El puesto interno numérico sigue siendo correlativo dentro de cada combinación.
+            </div>
+            <div className="space-y-3">
+                {renderSequenceEditor('Bloques', 'rotationBlockFillSequence', blockSequence, normalizeRotationBlockFillSequence, value => `P${value}`)}
+                {renderSequenceEditor('Subbloques', 'rotationSubblockFillSequence', subblockSequence, normalizeRotationSubblockFillSequence, value => value)}
+                {renderSequenceEditor('Subsubbloques', 'rotationSubsubblockFillSequence', subsubblockSequence, normalizeRotationSubsubblockFillSequence, value => value)}
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                <div className="text-[9px] font-black text-slate-500 uppercase mb-1">Secuencia activa de unidades</div>
+                <div className="text-[11px] font-bold text-slate-700 rotation-wrap">{unitSequence.join(' -> ')}</div>
+            </div>
+        </div>
+    );
+});
 
 /**
  * FIX (no cambia estilo): añadidos campos que se usaban en Rotación y no existían.
@@ -816,29 +1033,11 @@ const Ajustes = React.memo(function Ajustes({ config, setConfig, onBack, onSaveC
 	                                <button onClick={() => document.getElementById('rotationExcelInput').click()} className="flex-1 px-3 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-xl text-[10px] font-bold shadow-sm transition-colors">Subir Excel DNE</button>
 	                                <button onClick={clearRotationExcel} disabled={!Array.isArray(config.rotationDneList) || config.rotationDneList.length === 0} className={`px-3 py-2 rounded-xl text-[10px] font-bold shadow-sm transition-colors ${Array.isArray(config.rotationDneList) && config.rotationDneList.length > 0 ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 border border-rose-300' : 'bg-gray-200 text-gray-500 border border-gray-200'}`}>Limpiar</button>
 	                            </div>
-	                            <div className="pt-2 border-t border-slate-200">
-	                                <div className="flex items-center justify-between mb-2">
-	                                    <label className="text-[10px] font-bold text-slate-700 uppercase">Secuencia unidades del sorteo</label>
-	                                    <button onClick={resetRotationUnitSequence} className="px-2 py-1 bg-white text-slate-700 border border-slate-300 rounded-lg text-[10px] font-bold hover:bg-slate-100 transition-colors">Restaurar</button>
-	                                </div>
-	                                <p className="text-[10px] text-gray-500 mb-2">El orden por defecto queda `A1 -> B1 -> C1 -> A2 ...`. Puedes mover cada unidad para ajustar la secuencia real.</p>
-	                                <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
-	                                    {rotationUnitSequence.map((unit, idx) => (
-	                                        <div key={`${unit}-${idx}`} className="flex items-center justify-between bg-white/80 border border-slate-200 rounded-lg px-2 py-1.5">
-	                                            <div className="flex items-center gap-2">
-	                                                <span className="w-6 text-center text-[10px] font-black text-slate-500">{idx + 1}</span>
-	                                                <span className="text-[11px] font-black text-slate-800">{unit}</span>
-	                                            </div>
-	                                            <div className="flex items-center gap-1">
-		                                                <button onClick={() => moveRotationUnit(idx, -1)} disabled={idx === 0} className={`px-2 py-1 rounded text-[10px] font-black ${idx === 0 ? 'bg-gray-200 text-gray-400' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300'}`}>Subir</button>
-		                                                <button onClick={() => moveRotationUnit(idx, 1)} disabled={idx === rotationUnitSequence.length - 1} className={`px-2 py-1 rounded text-[10px] font-black ${idx === rotationUnitSequence.length - 1 ? 'bg-gray-200 text-gray-400' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300'}`}>Bajar</button>
-	                                            </div>
-	                                        </div>
-	                                    ))}
-	                                </div>
-	                            </div>
-	                        </div>
-	                    </div>
+                            <div className="pt-2 border-t border-slate-200">
+                                <RotationFillOrderEditor config={config} setConfig={setConfig} title="Orden de relleno del sorteo" />
+                            </div>
+                        </div>
+                    </div>
 
 		                    <div className="panel p-5 bg-orange-50/60 border-orange-200">
                         <h3 className="font-black text-orange-800 border-b border-orange-200 pb-2 mb-4 uppercase text-xs tracking-widest">Nivel de presi&oacute;n (Cal. A)</h3>
@@ -2289,7 +2488,7 @@ const SimuladorEngine = React.memo(function SimuladorEngine({ tipo, config, setC
 // ==========================================
 // COMPONENTE: SIMULADOR ROTACIÓN DINÁMICA
 // ==========================================
-function SimuladorRotacion({ globalMTE, config, onBack }) {
+function SimuladorRotacion({ globalMTE, config, setConfig, onBack }) {
     const [currentStep, setCurrentStep] = useState(0); 
     const [isPlaying, setIsPlaying] = useState(false);
     const [selectedId, setSelectedId] = useState('A1');
@@ -2328,7 +2527,14 @@ function SimuladorRotacion({ globalMTE, config, onBack }) {
         return Math.max(0, Math.min(99999, parsed));
     }, [onceNumber]);
     const formattedOnceNumber = useMemo(() => String(normalizedOnceNumber).padStart(5, '0'), [normalizedOnceNumber]);
-    const rotationUnitSequence = useMemo(() => normalizeRotationUnitSequence(config?.rotationUnitSequence), [config]);
+    const rotationBlockFillSequence = useMemo(() => normalizeRotationBlockFillSequence(config?.rotationBlockFillSequence), [config?.rotationBlockFillSequence]);
+    const rotationSubblockFillSequence = useMemo(() => normalizeRotationSubblockFillSequence(config?.rotationSubblockFillSequence), [config?.rotationSubblockFillSequence]);
+    const rotationSubsubblockFillSequence = useMemo(() => normalizeRotationSubsubblockFillSequence(config?.rotationSubsubblockFillSequence), [config?.rotationSubsubblockFillSequence]);
+    const rotationFillPriority = useMemo(() => normalizeRotationFillPriority(config?.rotationFillPriority), [config?.rotationFillPriority]);
+    const rotationUnitSequence = useMemo(
+        () => buildRotationUnitSequence(rotationSubblockFillSequence, rotationSubsubblockFillSequence, rotationFillPriority),
+        [rotationSubblockFillSequence, rotationSubsubblockFillSequence, rotationFillPriority]
+    );
     const winningStartPosition = useMemo(() => {
         if (rotationTemplateSize <= 0) return 0;
         return Math.floor((normalizedOnceNumber * rotationTemplateSize) / 100000) + 1;
@@ -2338,7 +2544,13 @@ function SimuladorRotacion({ globalMTE, config, onBack }) {
         const startIdx = Math.min(rotationDneList.length - 1, Math.max(0, winningStartPosition - 1));
         return rotationDneList[startIdx] || '';
     }, [rotationDneList, winningStartPosition]);
-	    const rotationAssignmentSlots = useMemo(() => buildRotationAssignmentSlots(rotationDneList.length, rotationUnitSequence), [rotationDneList.length, rotationUnitSequence]);
+	    const rotationAssignmentSlots = useMemo(() => buildRotationAssignmentSlotsByFillOrder(rotationDneList.length, {
+	        unitSequence: rotationUnitSequence,
+	        blockSequence: rotationBlockFillSequence,
+	        groupSequence: rotationSubblockFillSequence,
+	        subSequence: rotationSubsubblockFillSequence,
+	        fillPriority: rotationFillPriority
+	    }), [rotationDneList.length, rotationUnitSequence, rotationBlockFillSequence, rotationSubblockFillSequence, rotationSubsubblockFillSequence, rotationFillPriority]);
 	    const rotationSeatsPerUnit = useMemo(() => {
 	        const unitCount = Math.max(1, rotationUnitSequence.length || ALL_ROTATION_UNITS.length);
 	        if (rotationTemplateSize <= 0) return 1;
@@ -3003,10 +3215,9 @@ th { background: #f3f4f6; text-align: center; }
 		                                    <div className="text-[11px] font-black text-blue-700 mt-1 rotation-wrap">{generatedRotationOrder[0]?.slotLabel || '-'}</div>
 		                                </div>
 		                            </div>
-		                            <div className="mb-4 bg-white/60 rounded-xl border border-gray-200 p-3">
-		                                <div className="text-[9px] font-black text-gray-500 uppercase mb-1">Secuencia activa de unidades</div>
-		                                <div className="text-[11px] font-bold text-slate-700 rotation-wrap">{rotationUnitSequence.join(' -> ')}</div>
-		                            </div>
+			                            <div className="mb-4">
+			                                <RotationFillOrderEditor config={config} setConfig={setConfig} title="Orden de relleno en rotación" />
+			                            </div>
 	                            {generatedRotationOrder.length === 0 ? (
 	                                <div className="rounded-xl border border-dashed border-gray-300 bg-white/40 p-6 text-center text-sm font-bold text-gray-500">
 	                                    Carga el Excel de DNE en Configurar e introduce el número ONCE para ver el orden.
@@ -3817,7 +4028,7 @@ function AppRouter() {
     return (
         <div className="relative z-10 w-full h-full no-print">
             { view === 'calA' && <SimuladorEngine tipo="A" config={config} setConfig={setConfig} onBack={() => setView('home')} onGoAnalysis={() => setView('analisis')} initialScenario={pendingScenario} onInitialScenarioApplied={handleScenarioApplied} /> }
-            { view === 'rotacion' && <SimuladorRotacion globalMTE={config.globalMTE} config={config} onBack={() => setView('home')} /> }
+            { view === 'rotacion' && <SimuladorRotacion globalMTE={config.globalMTE} config={config} setConfig={setConfig} onBack={() => setView('home')} /> }
             { view === 'analisis' && <SimuladorAnalisis config={config} onBack={() => setView('home')} onOpenScenario={handleOpenScenarioFromAnalisis} /> }
             { view === 'ajustes' && <Ajustes config={config} setConfig={setConfig} onBack={() => setView('home')} onSaveConfig={saveConfig} /> }
             
