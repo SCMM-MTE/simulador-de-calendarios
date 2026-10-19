@@ -35,7 +35,7 @@ export default function Home() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <h1 className="text-3xl font-black text-gray-900">📅 SCMM Simulador Calendarios</h1>
+          <div className="flex items-center gap-3"><img src="/assets/scmm-logo.svg" alt="SCMM" width="64" height="64" /><h1 className="text-3xl font-black text-gray-900">SCMM Simulador Calendarios</h1></div>
           <p className="text-gray-600 text-sm mt-1">
             Simulación de calendarios laborales, rotaciones y análisis de presión
           </p>
