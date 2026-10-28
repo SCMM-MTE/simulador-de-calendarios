@@ -70,6 +70,6 @@ export function rosterCsvToDataset(csv) {
   }
   if(quoted||rows.length<2)throw Error('CSV incompleto.');
   const headers=rows.shift().map(h=>h.replace(/^\uFEFF/,'').trim().toLowerCase());
-  const id=headers.indexOf('dne'),rank=headers.indexOf('escalafon'),group=headers.indexOf('grupo_descanso');if(id<0)throw Error('Falta la columna dne.');
+  const id=headers.indexOf('dne'),rank=headers.includes('escalafon')?headers.indexOf('escalafon'):headers.indexOf('orden_total'),group=headers.indexOf('grupo_descanso');if(id<0)throw Error('Falta la columna dne.');
   return validateDataset({schema:'scmm-personal-simulator-v1',version:new Date().toISOString(),sourceReference:'Archivo CSV importado localmente',entries:rows.map(r=>({dne:r[id],seniorityRank:rank<0||!r[rank]?null:Number(r[rank]),restGroup:group<0||!r[group]?null:Number(r[group]),years:{}})),calendars:{}});
 }
