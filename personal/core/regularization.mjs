@@ -12,7 +12,7 @@ export function parseAmount(value,unit='days',sign='credit'){
  return minutes(sign==='zero'?0:(sign==='debit'?-1:1)*rounded,'Saldo de 2026');
 }
 export function validateOptions(raw={}){
- if(!raw||typeof raw!=='object'||Array.isArray(raw)||Object.keys(raw).some(k=>!['opening2026Minutes','yearlyTotals'].includes(k)))throw Error('Configuración de cómputo no válida.');
+ if(!raw||typeof raw!=='object'||Array.isArray(raw)||Object.keys(raw).some(k=>!['opening2026Minutes','yearlyTotals','medicalModes'].includes(k)))throw Error('Configuración de cómputo no válida.');
  const opening2026Minutes=raw.opening2026Minutes==null?null:minutes(raw.opening2026Minutes,'Saldo de 2026');
  const yearlyTotals={};
  if(raw.yearlyTotals!=null&&(typeof raw.yearlyTotals!=='object'||Array.isArray(raw.yearlyTotals)))throw Error('Totales anuales no válidos.');
@@ -24,7 +24,9 @@ export function validateOptions(raw={}){
   if(typeof t.reference!=='string'||!t.reference.trim()||t.reference.length>300)throw Error('Falta la referencia del total anual.');
   yearlyTotals[year]={baseDays:t.baseDays,targetMinutes:t.targetMinutes,reference:t.reference.trim(),specialCase:t.specialCase===true};
  }
- return {opening2026Minutes,yearlyTotals};
+ const medicalModes=raw.medicalModes??{};
+ if(!medicalModes||typeof medicalModes!=='object'||Array.isArray(medicalModes)||Object.entries(medicalModes).some(([year,mode])=>!/^\d{4}$/.test(year)||Number(year)<2027||Number(year)>2100||!['inside','outside'].includes(mode)))throw Error('Modalidad R.M. no válida.');
+ return {opening2026Minutes,yearlyTotals,medicalModes:{...medicalModes}};
 }
 export function requestBudget(opening,dailyMinutes=480){
  if(opening!=null)minutes(opening,'Saldo anterior');
@@ -48,11 +50,12 @@ export function validateChoices(plan,year,budget){
  if(previous!==0&&(budget.previousPool==null||Math.sign(previous)!==Math.sign(budget.previousPool)||Math.abs(previous)>Math.abs(budget.previousPool)))throw Error('La elección supera el saldo del año anterior pendiente o no corresponde a su naturaleza.');
  return {previous,current};
 }
-export function actaYear(dataset,profile,year,overrides={},opening=null,totals=null){
+export function actaYear(dataset,profile,year,overrides={},opening=null,totals=null,medicalMode=null){
  let effective=profile;const imported=profile.years[year];
  if(!imported&&totals){
   effective={...profile,years:{...profile.years,[year]:{vacations:[],pfa:[],medicalRestDates:[],dailyMinutes:480,annualTargetMinutes:totals.targetMinutes,openingBalanceMinutes:opening,sourceReference:totals.reference}}};
  }else if(imported)effective={...profile,years:{...profile.years,[year]:{...imported,openingBalanceMinutes:opening}}};
+ if(medicalMode==='inside'&&effective.years[year])effective={...effective,years:{...effective.years,[year]:{...effective.years[year],medicalRestDates:[]}}};
  const dailyMinutes=effective.years[year]?.dailyMinutes??480,budget=requestBudget(opening,dailyMinutes);
  if(!effective.years[year])return {ready:false,year,reason:'Faltan el calendario y el plan de este año. Puedes introducir un total de jornadas para una estimación.',budget,calendarReady:false,periodsKnown:false,currentRemainingMinutes:budget.currentPool,unresolvedOpeningMinutes:budget.previousPool,netRemainingMinutes:budget.net};
  const plan=overridePlan(effective,year,overrides),chosen=validateChoices(plan,year,budget);
@@ -65,7 +68,8 @@ export function actaYear(dataset,profile,year,overrides={},opening=null,totals=n
  // planned work, with previous credits/debits and current advances identified separately.
  const workMinutes=totals?totals.baseDays*dailyMinutes-chosen.previous-chosen.current:base.workMinutes;
  const ordinaryReference=!totals&&base.annualTargetMinutes==null&&dailyMinutes===POLICY.dailyMinutes;
- const target=totals?totals.targetMinutes:(base.annualTargetMinutes??(ordinaryReference?POLICY.ordinaryFullYearDays*dailyMinutes:null));
+ const medicalTarget=medicalMode?(POLICY.ordinaryFullYearDays-(medicalMode==='outside'?1:0))*dailyMinutes:null;
+ const target=medicalTarget??(totals?totals.targetMinutes:(base.annualTargetMinutes??(ordinaryReference?POLICY.ordinaryFullYearDays*dailyMinutes:null)));
  const raw=target==null?null:workMinutes-target;
  // Current-year advances have already been issued: unused ones must not be generated
  // again as a new credit. Prior compensation, including netting, is also kept separate.
@@ -78,7 +82,7 @@ export function actaLedger(dataset,profile,overrides={},lastYear=2028,rawOptions
  for(let year=2027;year<=lastYear;year++){
   const previous=results.at(-1)?.projectedNextYearMinutes??null,imported=profile.years[year]?.openingBalanceMinutes??null;
   const opening=year===2027?(options.opening2026Minutes??imported):(imported??previous);
-  let r;try{r=actaYear(dataset,profile,year,overrides[year]??{},opening,options.yearlyTotals[year]??null);}catch(error){r={ready:false,year,invalidPlan:true,reason:error.message,budget:requestBudget(opening)}}
+  let r;try{r=actaYear(dataset,profile,year,overrides[year]??{},opening,options.yearlyTotals[year]??null,options.medicalModes[year]??null);}catch(error){r={ready:false,year,invalidPlan:true,reason:error.message,budget:requestBudget(opening)}}
   r.projectedFromPreviousYear=previous;r.openingOrigin=year===2027&&options.opening2026Minutes!==null?'user':imported!==null?'imported':previous!==null?'projection':'pending';results.push(r);
  }
  return results;

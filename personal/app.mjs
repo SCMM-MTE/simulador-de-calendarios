@@ -12,7 +12,7 @@ import {actaLedger,parseAmount,validateOptions,POLICY} from './core/regularizati
 const $=id=>document.getElementById(id);
 const months=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const dayNames=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-const state={dataset:null,profile:null,draw:[],number:'00000',mode:'once',year:2027,view:'calendar',overrides:{},month:'all',period:'all',calculationOptions:{opening2026Minutes:null,yearlyTotals:{}}};
+const state={dataset:null,profile:null,draw:[],number:'00000',mode:'once',year:2027,view:'calendar',overrides:{},month:'all',period:'all',calculationOptions:{opening2026Minutes:null,yearlyTotals:{},medicalModes:{2027:"inside"}}};
 const node=(tag,text,className)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(className)e.className=className;return e;};
 const cell=text=>node('td',text);
 const journeys=(minutes,dailyMinutes=480)=>minutes==null?'Pendiente':`${new Intl.NumberFormat('es-ES',{maximumFractionDigits:4}).format(minutes/dailyMinutes)} jornadas`;
@@ -30,7 +30,7 @@ function enter(event){
   try{
     if(!state.dataset)throw Error('Todavía no está cargado el nuevo escalafón. Puedes revisar el ejemplo ficticio mientras se incorpora.');
     const id=dne($('dne').value);lotteryNumber($('lottery').value);const profile=enroll(state.dataset,id,$('entryRestGroup').value,$('entryPeriod').value);
-    state.profile=profile;state.number=$('lottery').value;state.mode=$('lotteryMode').value;state.year=2027;state.overrides={};state.view='compute';state.calculationOptions={opening2026Minutes:null,yearlyTotals:{}};state.month='all';state.period='all';$('periodFilter').value='all';$('month').value='all';
+    state.profile=profile;state.number=$('lottery').value;state.mode=$('lotteryMode').value;state.year=2027;state.overrides={};state.view='compute';state.calculationOptions={opening2026Minutes:null,yearlyTotals:{},medicalModes:{2027:"inside"}};state.month='all';state.period='all';$('periodFilter').value='all';$('month').value='all';
     state.draw=state.dataset.rosterReady?drawRoster(state.dataset.entries,state.number):[];$('entry').hidden=true;$('workspace').hidden=false;$('exit').hidden=false;$('profileDetails').open=!matchMedia('(max-width:900px)').matches;
     syncComputationForms();render();window.scrollTo(0,0);
   }catch(error){$('entryError').textContent=error.message;}
@@ -42,7 +42,8 @@ function renderProfile(result){
   $('profileFacts').replaceChildren(fact('Grupo de descanso',p.restGroup?groupLabel(p.restGroup)+(profileFor(state.dataset,p.dne)?.restGroup!=null?' · preasignado':' · declarado'):'Pendiente de carga'),fact('Escalafón',p.seniorityRank??'Pendiente'),fact('Número simulado',state.number),fact('Orden inicial del sorteo',person?`${person.lotteryOrder} / ${state.draw.length}`:'Pendiente de escalafón'),fact('Asignación personal',person?`B${person.assignment.initialBlock} · ${person.assignment.group}${person.assignment.subgroup}`:'Pendiente de escalafón'),fact('Preferencia '+state.year,preference?`B${preference.block} · ${preference.withinBlockPriority}/12`:'Pendiente'),fact('Puesto anual simulado',annualOrder?`${annualOrder.simulatedAnnualOrder} / ${state.draw.length}`:'Pendiente'));
   const plan=result?.periodsKnown===false?null:result?.plan??p.years[state.year];
   $('vacations').textContent=datesText(plan?.vacations);$('pfa').textContent=datesText(plan?.pfa);
-  $('medicalRest').textContent=plan?(plan.medicalRestDates?.length?plan.medicalRestDates.map(displayDate).join(' · '):'Sin fecha importada'):'Pendiente';
+  $('medicalMode').value=state.calculationOptions.medicalModes?.[state.year]??'inside';
+  $('medicalRest').textContent=state.calculationOptions.medicalModes?.[state.year]==='inside'?'No corresponde: R.M. dentro de jornada':plan?(plan.medicalRestDates?.length?plan.medicalRestDates.map(displayDate).join(' · '):'Sin fecha importada'):'Pendiente';
   const simulatedGroup=periodsModified(plan)?periodCatalog.periods.find(p=>JSON.stringify(p.vacations)===JSON.stringify(plan.vacations)&&JSON.stringify(p.pfa)===JSON.stringify(plan.pfa)):null;
   $('periodLabel').textContent=simulatedGroup?'Grupo simulado: '+simulatedGroup.code:(plan?.periodLabel?'Referencia PDF: '+plan.periodLabel:'')+(periodsModified(plan)?' · Fechas modificadas en este escenario.':'');
   $('profileSource').textContent=`Archivo: ${state.dataset.version}. ${plan?.sourceReference??state.dataset.sourceReference}`;
@@ -148,7 +149,7 @@ function render(){
 }
 function setYear(year){
   if(!Number.isInteger(year)||year<2027||year>2100){setNotice('Elige un año entre 2027 y 2100.');$('year').value=state.year;return;}
-  state.year=year;syncYearForm();setNotice('');render();
+  state.year=year;state.calculationOptions.medicalModes={...state.calculationOptions.medicalModes,[year]:state.calculationOptions.medicalModes?.[year]??'inside'};syncYearForm();setNotice('');render();
 }
 function openPeriods(){
  const plan=current()?.plan??state.profile.years[state.year];
@@ -170,7 +171,7 @@ $('lotteryMode').onchange=()=>{if($('lotteryMode').value==='random')$('lottery')
 $('demo').onclick=()=>{state.dataset=demoDataset();$('dne').value=state.dataset.entries[0].dne;$('lottery').value='00000';$('lotteryMode').value='random';$('datasetStatus').textContent='Ejemplo ficticio: no contiene datos de maquinistas.';enter();};
 $('load').onclick=()=>$('datasetFile').click();
 $('datasetFile').onchange=async()=>{const file=$('datasetFile').files[0];if(!file)return;try{if(file.size>10_000_000)throw Error('El archivo supera 10 MB.');const content=await file.text();state.dataset=file.name.toLowerCase().endsWith('.csv')?rosterCsvToDataset(content):validateDataset(JSON.parse(content));$('datasetStatus').textContent=`Archivo cargado: ${state.dataset.entries.length} DNE. ${state.dataset.rosterReady?'':'Escalafón pendiente; los periodos pueden consultarse. '}${state.dataset.sourceReference}`;$('entryError').textContent='';}catch(error){$('entryError').textContent=error.message;}finally{$('datasetFile').value='';syncEntry();}};
-$('exit').onclick=()=>{state.profile=null;state.draw=[];state.overrides={};state.calculationOptions={opening2026Minutes:null,yearlyTotals:{}};$('workspace').hidden=true;$('entry').hidden=false;$('exit').hidden=true;$('dne').value='';syncEntry();if(state.dataset?.demo){state.dataset=null;loadDefaults();}window.scrollTo(0,0);};
+$('exit').onclick=()=>{state.profile=null;state.draw=[];state.overrides={};state.calculationOptions={opening2026Minutes:null,yearlyTotals:{},medicalModes:{2027:"inside"}};$('workspace').hidden=true;$('entry').hidden=false;$('exit').hidden=true;$('dne').value='';syncEntry();if(state.dataset?.demo){state.dataset=null;loadDefaults();}window.scrollTo(0,0);};
 $('previousYear').onclick=()=>setYear(state.year-1);$('nextYear').onclick=()=>setYear(state.year+1);$('year').onchange=()=>setYear(Number($('year').value));
 
 for(let i=0;i<12;i++){const option=node('option',months[i]);option.value=i;$('month').append(option);}
@@ -190,7 +191,7 @@ $('restoreSimulation').onclick=()=>$('simulationFile').click();
 $('simulationFile').onchange=async()=>{const file=$('simulationFile').files[0];if(!file)return;try{
  if(file.size>500000)throw Error('El archivo de simulación supera el tamaño permitido.');
  const restored=restoreSimulation(JSON.parse(await file.text()),state.dataset,state.profile);
- state.overrides=restored.overrides;state.calculationOptions=restored.calculationOptions;syncComputationForms();state.number=restored.number;state.mode=restored.mode;
+ state.overrides=restored.overrides;state.calculationOptions={...restored.calculationOptions,medicalModes:{2027:"inside",...restored.calculationOptions.medicalModes}};syncComputationForms();state.number=restored.number;state.mode=restored.mode;
  state.draw=state.dataset.rosterReady?drawRoster(state.dataset.entries,state.number):[];render();setNotice('Simulación recuperada. Los datos importados y el grupo de descanso se conservan.');
 }catch(error){setNotice(error.message);}finally{$('simulationFile').value='';}};
 function syncComputationForms(){
@@ -214,7 +215,7 @@ function renderComputation(result){
  const target=result?.annualTargetMinutes,work=result?.workMinutes;
  $('computationBreakdown').replaceChildren(card('Trabajo previsto',work==null?'Pendiente':journeys(work),result?.manualTotals?'Total declarado por ti, ajustado por las elecciones.':'Según tu calendario, vacaciones, PFA, R.M. y elecciones.'),card(`Neto para ${year+1}`,amount(result?.projectedNextYearMinutes),result?.ready?'Descontados los siete días ya adelantados; las compensaciones anteriores se separan.':result?.reason??'Faltan datos.',signClass(result?.projectedNextYearMinutes)));
  $('formulaDetail').textContent=result?.ready?`${journeys(work)} de trabajo previsto − ${journeys(target)} de objetivo ${result.previousSettledMinutes?' + ajuste anterior '+amount(result.previousSettledMinutes):''} − ${journeys(result.unissuedAgainMinutes)} de adelanto todavía no disfrutado = ${amount(result.projectedNextYearMinutes)} netos para el año siguiente.`:'La estimación no convierte en crédito los periodos de vacaciones/PFA ni vuelve a sumar un saldo anterior.';
- $('totalsActive').textContent=result?.targetOrigin==='ordinary_reference'?'El calendario usa la referencia ordinaria de 202 jornadas completas para jornada completa y año completo. Las situaciones especiales requieren su tratamiento específico.':result?.manualTotals?'Esta estimación usa el total de jornadas declarado. El desglose por fecha solo se calcula cuando está disponible el calendario de tu grupo.':'El cálculo por calendario se activa con el grupo fijo, su calendario y el objetivo anual. El total manual permite probar el balance mientras falten esos datos.';
+ $('totalsActive').textContent=result?.targetOrigin==='ordinary_reference'?`El calendario usa la referencia ordinaria de ${state.calculationOptions.medicalModes?.[year]==='outside'?201:202} jornadas completas según la modalidad de R.M.. Las situaciones especiales requieren su tratamiento específico.`:result?.manualTotals?'Esta estimación usa el total de jornadas declarado. El desglose por fecha solo se calcula cuando está disponible el calendario de tu grupo.':'El cálculo por calendario se activa con el grupo fijo, su calendario y el objetivo anual. El total manual permite probar el balance mientras falten esos datos.';
 }
 function dayNature(d){return d.vacation?'Vacaciones':d.pfa?'PFA':d.medicalRest?'Descanso R.M.':d.selection?(d.selection.kind==='rest_credit'?'Crédito elegido':'Trabajo por débito'):d.rest===null?'Descanso/trabajo pendiente':d.rest?'Descanso fijo':'Trabajo';}
 function renderDayAudit(result){
@@ -272,3 +273,5 @@ syncEntry();loadDefaults();
 
 $('calendarEnterOpening').onclick=()=>{state.view='compute';render();$('openingForm').scrollIntoView({block:'center',behavior:'smooth'});$('openingAmount').focus({preventScroll:true});};
 $('calendarZeroOpening').onclick=()=>{state.calculationOptions.opening2026Minutes=0;syncComputationForms();render();setNotice('Simulación con saldo anterior cero. Puedes modificarlo en Cómputo.');};
+
+$('medicalMode').onchange=()=>{const mode=$('medicalMode').value;if(mode==='outside'){const rests=state.profile.years[state.year]?.medicalRestDates??[];const old=state.overrides[state.year]??{};state.overrides[state.year]={...old,selections:(old.selections??[]).filter(s=>!rests.includes(s.date))};}state.calculationOptions.medicalModes={...state.calculationOptions.medicalModes,[state.year]:mode};render();setNotice(mode==='inside'?'R.M. dentro de jornada: objetivo de 202 jornadas, sin descanso compensatorio.':'R.M. fuera de jornada: objetivo de 201 jornadas y descanso compensatorio preasignado.');};
