@@ -43,9 +43,10 @@ function renderProfile(result){
   const plan=result?.periodsKnown===false?null:result?.plan??p.years[state.year];
   $('vacations').textContent=datesText(plan?.vacations);$('pfa').textContent=datesText(plan?.pfa);
   $('medicalRest').textContent=plan?(plan.medicalRestDates?.length?plan.medicalRestDates.map(displayDate).join(' · '):'Sin fecha importada'):'Pendiente';
-  $('periodLabel').textContent=(plan?.periodLabel?'Referencia PDF: '+plan.periodLabel:'')+(periodsModified(plan)?' · Fechas modificadas en este escenario.':'');
+  const simulatedGroup=periodsModified(plan)?periodCatalog.periods.find(p=>JSON.stringify(p.vacations)===JSON.stringify(plan.vacations)&&JSON.stringify(p.pfa)===JSON.stringify(plan.pfa)):null;
+  $('periodLabel').textContent=simulatedGroup?'Grupo simulado: '+simulatedGroup.code:(plan?.periodLabel?'Referencia PDF: '+plan.periodLabel:'')+(periodsModified(plan)?' · Fechas modificadas en este escenario.':'');
   $('profileSource').textContent=`Archivo: ${state.dataset.version}. ${plan?.sourceReference??state.dataset.sourceReference}`;
-  $('editPeriods').disabled=!p.years[state.year];$('restorePeriods').disabled=!p.years[state.year];
+  $('editPeriods').disabled=!p.years[state.year]||state.year!==periodCatalog.year;$('restorePeriods').disabled=!p.years[state.year];
 }
 const periodDays=ranges=>(ranges??[]).reduce((total,r)=>total+datesBetween(r.start,r.end).length,0);
 function renderPeriodAnalysis(result){
@@ -149,13 +150,15 @@ function setYear(year){
   if(!Number.isInteger(year)||year<2027||year>2100){setNotice('Elige un año entre 2027 y 2100.');$('year').value=state.year;return;}
   state.year=year;syncYearForm();setNotice('');render();
 }
-function rangeRow(container,kind,range={start:'',end:''}){
-  const row=node('div',undefined,'range-row');
-  for(const [key,label] of [['start','Desde'],['end','Hasta']]){const wrapper=node('label',`${kind}: ${label}`),input=node('input');input.type='date';input.required=true;input.min=`${state.year}-01-01`;input.max=`${state.year}-12-31`;input.dataset.rangeKey=key;input.value=range[key];wrapper.append(input);row.append(wrapper);}
-  const remove=node('button','Quitar');remove.type='button';remove.onclick=()=>row.remove();row.append(remove);container.append(row);
+function openPeriods(){
+ const plan=current()?.plan??state.profile.years[state.year];
+ $('periodGroup').replaceChildren();
+ const original=state.profile.years[state.year];
+ const options=[{code:'original',label:'Mi preasignación',vacations:original.vacations,pfa:original.pfa},...periodCatalog.periods.map(p=>({...p,label:'Grupo '+p.code}))];
+ for(const period of options){const option=node('option',`${period.label} · Vacaciones: ${datesText(period.vacations)} · PFA: ${datesText(period.pfa)}`);option.value=period.code;$('periodGroup').append(option);}
+ $('periodGroup').value=options.find(p=>JSON.stringify(p.vacations)===JSON.stringify(plan.vacations)&&JSON.stringify(p.pfa)===JSON.stringify(plan.pfa))?.code??'original';
+ $('periodError').textContent='';$('periodDialog').showModal();
 }
-function openPeriods(){const plan=current()?.plan??state.profile.years[state.year];$('vacationRows').replaceChildren();$('pfaRows').replaceChildren();for(const r of plan.vacations)rangeRow($('vacationRows'),'Vacaciones',r);for(const r of plan.pfa)rangeRow($('pfaRows'),'PFA',r);$('periodError').textContent='';$('periodDialog').showModal();}
-function readRows(id){return [...$(id).querySelectorAll('.range-row')].map(row=>Object.fromEntries([...row.querySelectorAll('input')].map(i=>[i.dataset.rangeKey,i.value])));}
 function applyPeriods(vacations,pfa){
   const old=state.overrides[state.year]??{},existing=old.selections??[],selections=existing.filter(s=>!inRanges(s.date,vacations)&&!inRanges(s.date,pfa));
   const next={...old,vacations,pfa,selections};overridePlan(state.profile,state.year,next);state.overrides[state.year]=next;render();
@@ -175,8 +178,11 @@ $('periodFilter').onchange=()=>{state.period=$('periodFilter').value;renderCalen
 $('month').onchange=()=>{state.month=$('month').value;renderCalendar(current());};
 for(const button of document.querySelectorAll('[data-view]'))button.onclick=()=>{state.view=button.dataset.view;setNotice('');render();};
 $('editPeriods').onclick=openPeriods;$('closePeriods').onclick=()=>$('periodDialog').close();
-$('addVacation').onclick=()=>rangeRow($('vacationRows'),'Vacaciones');$('addPfa').onclick=()=>rangeRow($('pfaRows'),'PFA');
-$('periodForm').onsubmit=event=>{event.preventDefault();try{applyPeriods(readRows('vacationRows'),readRows('pfaRows'));$('periodDialog').close();}catch(error){$('periodError').textContent=error.message;}};
+$('periodForm').onsubmit=event=>{event.preventDefault();try{
+ const code=$('periodGroup').value,period=code==='original'?state.profile.years[state.year]:periodCatalog.periods.find(p=>p.code===code);
+ if(state.year!==periodCatalog.year||!period)throw Error('Elige un grupo de vacaciones de 2027.');
+ applyPeriods(period.vacations,period.pfa);$('periodDialog').close();
+}catch(error){$('periodError').textContent=error.message;}};
 $('restorePeriods').onclick=()=>{const plan=state.profile.years[state.year];try{applyPeriods(plan.vacations,plan.pfa);}catch(error){setNotice(error.message);}};
 $('resetChoices').onclick=()=>{state.overrides[state.year]={...(state.overrides[state.year]??{}),selections:[]};render();setNotice('Se han vaciado las elecciones de este año. La preasignación importada se conserva.');};
 $('download').onclick=()=>{const result={schema:'scmm-personal-simulation-v1',datasetVersion:state.dataset.version,dne:state.profile.dne,lottery:{number:state.number,mode:state.mode},overrides:state.overrides,calculationOptions:state.calculationOptions,policyVersion:POLICY.version,profileSetup:{restGroup:state.profile.restGroup,plan2027:state.profile.years[2027]},exportedAt:new Date().toISOString(),demo:state.dataset.demo};const url=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'}));const a=node('a');a.href=url;a.download=`simulacion-mte-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;a.click();URL.revokeObjectURL(url);};
