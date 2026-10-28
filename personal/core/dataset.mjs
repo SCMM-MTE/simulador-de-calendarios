@@ -3,6 +3,11 @@ import {yearDates,parseDate,validateRanges,datesBetween} from './dates.mjs';
 const integer=(value,min,max,label)=>{if(!Number.isSafeInteger(value)||value<min||value>max)throw Error(label+' no válido.');return value;};
 const text=(value,label)=>{if(typeof value!=='string'||!value.trim()||value.length>1000)throw Error('Falta '+label+'.');return value.trim();};
 const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};
+function validateMedicalDates(dates,year){
+  if(!Array.isArray(dates)||dates.length>12)throw Error('Fechas R.M. no válidas.');
+  const seen=new Set();for(const d of dates){parseDate(d);if(!d.startsWith(year+'-')||seen.has(d))throw Error('R.M. duplicado o fuera del año.');seen.add(d);}
+  return [...seen].sort();
+}
 function assignment(raw) {
   if(raw==null)return null;
   if(!['A','B','C'].includes(raw.group))throw Error('Grupo de regularización no válido.');
@@ -21,7 +26,7 @@ export function validateDataset(input) {
     const years={};for(const [key,plan] of Object.entries(raw.years??{})){
       const year=integer(Number(key),2027,2100,'Año');
       const vacations=validateRanges(plan.vacations??[],year),pfa=validateRanges(plan.pfa??[],year);validateRanges([...vacations,...pfa],year);
-      years[year]={vacations,pfa,dailyMinutes:integer(plan.dailyMinutes??480,1,1440,'Duración de jornada'),annualTargetMinutes:plan.annualTargetMinutes==null?null:integer(plan.annualTargetMinutes,0,600000,'Objetivo anual'),openingBalanceMinutes:plan.openingBalanceMinutes==null?null:integer(plan.openingBalanceMinutes,-600000,600000,'Saldo inicial'),sourceReference:text(plan.sourceReference,'la referencia del plan anual')};
+      years[year]={vacations,pfa,dailyMinutes:integer(plan.dailyMinutes??480,1,1440,'Duración de jornada'),annualTargetMinutes:plan.annualTargetMinutes==null?null:integer(plan.annualTargetMinutes,0,600000,'Objetivo anual'),openingBalanceMinutes:plan.openingBalanceMinutes==null?null:integer(plan.openingBalanceMinutes,-600000,600000,'Saldo inicial'),medicalRestDates:validateMedicalDates(plan.medicalRestDates??[],year),periodLabel:plan.periodLabel==null?null:text(plan.periodLabel,'la referencia de los periodos'),sourceReference:text(plan.sourceReference,'la referencia del plan anual')};
     }
     return {dne:id,seniorityRank,restGroup,officialAssignment:assignment(raw.officialAssignment),years};
   });
@@ -37,7 +42,7 @@ export function validateDataset(input) {
     const holidays=[...new Set(raw.holidays??[])];holidays.forEach(d=>{parseDate(d);if(!d.startsWith(year+'-'))throw Error('Festivo fuera de su año.');});
     calendars[year]={groups,holidays,sourceReference:text(raw.sourceReference,'la referencia del calendario'),verified:raw.verified===true};
   }
-  return freeze({schema:input.schema,version,sourceReference,entries,calendars,demo:input.demo===true});
+  return freeze({schema:input.schema,version,sourceReference,entries,calendars,demo:input.demo===true,rosterReady:input.rosterReady!==false});
 }
 export function profileFor(dataset,id) {return dataset.entries.find(p=>p.dne===dne(id))??null;}
 export function overridePlan(profile,year,override={}) {

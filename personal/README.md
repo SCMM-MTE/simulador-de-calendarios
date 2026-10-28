@@ -36,6 +36,45 @@ las páginas 4–6: fórmula del sorteo, llenado y rotación.
 - El cupo PAP del 31/12 es independiente: 55 salvo domingo (37). No se utiliza
   como disponibilidad de regularización ni para adjudicar días.
 
+## Periodos extraídos del PDF aportado el 28/10/2026
+
+`VACACIONES Y FIESTAS AGRUPADAS MTE 2027.pdf.pdf`, 56 páginas, SHA-256
+`df7b8d19faad59dccf7c46fb02712ee7e07d0c40a2263b0c44936af2e21fb839`.
+La extracción privada contiene 2.084 DNE únicos: 2.077 ordinarios y siete casos
+individuales de matrimonio. No incluye nombres ni asigna escalafón/grupo.
+
+El catálogo público `core/periods-2027.mjs` contiene solo las fechas genéricas
+correspondientes a los 16 periodos ordinarios, sin DNE. Las combinaciones reales
+por DNE se conservan en el fichero privado; **no están incrustadas en la web**.
+El caso de matrimonio puede mezclar un verano y un invierno de distintas familias,
+con su propia fecha R.M.; no se reconstruye a partir del código de verano.
+
+El fichero privado lleva `rosterReady:false`. Permite consultar vacaciones, PFA y
+R.M. sin usar la lista de vacaciones como plantilla para el sorteo. Los demás días
+quedan sin determinar y no permiten elegir descansos ni calcular un balance
+laboral mientras falten los grupos/calendarios y objetivos correspondientes.
+
+En un invierno de 28 días se separan **los siete primeros de vacaciones** y los
+21 restantes de PFA, conforme al criterio MTE ya contrastado (Convenio PDF 89 y
+199, confirmación del 18/10/2026). Los inviernos de 21 días son íntegros PFA.
+El resultado individual de este PDF suma 30 días naturales de vacaciones y 21 de
+PFA en todos los casos. R.M. permanece separado como descanso compensatorio.
+
+Los campos opcionales anuales `medicalRestDates` y `periodLabel` conservan R.M.
+y los códigos de verano/invierno. R.M. no se convierte en vacaciones, no cuenta
+como trabajo y no se desplaza automáticamente al editar periodos del escenario.
+Cuando se aporte el escalafón, se cruzará por DNE sin sobrescribir estas fechas.
+
+Extractor reproducible, con salida **obligatoriamente fuera del repositorio**:
+
+```sh
+python tools/extract_mte_periods_2027.py /ruta/periodos.pdf /ruta/privada/salida
+python -m unittest discover -s tools/tests -v
+```
+
+Requiere PyMuPDF. Los resultados nominales no deben publicarse ni versionarse.
+El informe privado conserva página/fila por DNE y el hash del original.
+
 ## JSON
 
 Ejemplo ilustrativo de estructura, con DNE ficticio. No representa una plantilla

@@ -136,3 +136,31 @@ test('Retira la plantilla cacheada anterior sin borrar otros ajustes ni bloquear
  assert.deepEqual(JSON.parse(map.get('scmmConfig')),{state:{config:{otro:18}}});assert.equal(map.get('noTocar'),'contenido');
  assert.doesNotThrow(()=>retireLegacyRoster({getItem:()=>{throw Error('denegado')}}));
 });
+
+test('Periodos del PDF visibles sin escalafón ni descanso: 23+7 vacaciones, 21 PFA, R.M. separado',()=>{
+ const raw={schema:'scmm-personal-simulator-v1',version:'ficticio',sourceReference:'Ejemplo de composición',rosterReady:false,entries:[{dne:'9000000001',years:{2027:{vacations:[{start:'2027-08-08',end:'2027-08-30'},{start:'2027-04-24',end:'2027-04-30'}],pfa:[{start:'2027-05-01',end:'2027-05-21'}],medicalRestDates:['2027-08-31'],periodLabel:'Verano 2 · Invierno 2A1',sourceReference:'Ejemplo sin datos personales'}}}],calendars:{}};
+ const d=validateDataset(raw),p=d.entries[0],b=annualBalance(d,p,2027);
+ assert.equal(d.rosterReady,false);assert.equal(b.ready,false);assert.equal(b.periodsReady,true);
+ assert.equal(b.daily.length,365);assert.equal(b.daily.filter(d=>d.vacation).length,30);assert.equal(b.daily.filter(d=>d.pfa).length,21);assert.equal(b.daily.filter(d=>d.medicalRest).length,1);
+ assert.ok(b.daily.every(d=>d.rest===null));assert.equal(b.currentBalanceMinutes,undefined);
+ const changed=annualBalance(d,p,2027,{vacations:[{start:'2027-06-01',end:'2027-06-30'}]});assert.equal(changed.daily.filter(d=>d.vacation).length,30);assert.equal(p.years[2027].vacations.length,2);
+ assert.throws(()=>overridePlan(p,2027,{medicalRestDates:[]}));
+});
+test('R.M. reduce trabajo previsto una vez, incluso si coincide con descanso de grupo',()=>{
+ const d=fixture(),p=d.entries[0],base=annualBalance(d,p,2027),date=pick(d,2027)[0];
+ p.years[2027].medicalRestDates=[date];const changed=annualBalance(d,p,2027);assert.equal(changed.workMinutes,base.workMinutes-480);assert.equal(changed.medicalRestDays,1);
+ assert.throws(()=>annualBalance(d,p,2027,{selections:[select(date)]}));
+ p.years[2027].medicalRestDates=[pick(d,2027,true)[0]];assert.equal(annualBalance(d,p,2027).workMinutes,base.workMinutes);
+});
+
+test('El catálogo genérico refleja los 16 periodos del PDF, sin identificadores personales',async()=>{
+ const {periodCatalog}=await import('../core/periods-2027.mjs');assert.equal(periodCatalog.periods.length,16);
+ for(const p of periodCatalog.periods){
+  assert.equal(p.vacations.reduce((n,r)=>n+datesBetween(r.start,r.end).length,0),30);
+  assert.equal(p.pfa.reduce((n,r)=>n+datesBetween(r.start,r.end).length,0),21);
+  assert.equal(p.dne,undefined);assert.equal(p.nombre,undefined);
+  for(const r of [...p.vacations,...p.pfa])assert.ok(p.medicalRestDate<r.start||p.medicalRestDate>r.end);
+ }
+ assert.equal(periodCatalog.periods.find(p=>p.code==='2A1').pfa[0].start,'2027-05-01');
+ assert.equal(periodCatalog.periods.find(p=>p.code==='4B1').vacations[1].end,'2027-01-07');
+});

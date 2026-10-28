@@ -24,6 +24,9 @@ npm run test:personal
 - Ficha personal: escalafón, orden del sorteo, grupo de descanso fijo, asignación
   de regularización, preferencia anual, vacaciones y PFA.
 - Vacaciones/PFA preasignados, modificables dentro del escenario y restaurables.
+- Periodos 2027 del PDF: 16 combinaciones ordinarias, casos individuales de
+  matrimonio y descanso R.M. separado. Invierno de 28 días: 7 vacaciones + 21 PFA.
+- Consulta de periodos sin escalafón, sin adjudicar puestos ni descansos ficticios.
 - Calendario por mes o año; elección reversible de descansos/trabajos, diferenciando
   planificación del año y compensación del anterior.
 - Análisis de trabajo previsto, objetivo, saldo generado y compensaciones anteriores.
@@ -35,8 +38,11 @@ npm run test:personal
 
 ## Pendiente antes de utilizar datos reales
 
-El nuevo escalafón, las vacaciones/PFA y el grupo de descanso de cada DNE serán
-aportados por el usuario. Los calendarios oficiales de 2027 ya facilitados aún
+Las vacaciones/PFA y los descansos R.M. de 2027 ya están extraídos del PDF
+aportado: 2.084 DNE, con siete asignaciones especiales por matrimonio. El archivo
+nominal se conserva en privado, separado del código. El nuevo escalafón y los
+grupos de descanso por DNE siguen pendientes. La importación de periodos permite
+ver sus fechas sin inventar grupos, orden de sorteo ni jornadas de trabajo. Los calendarios oficiales de 2027 ya facilitados aún
 necesitan vincularse a este formato; no se sustituyen por los del Convenio ni por
 una proyección de 2026. Cada nuevo año requiere su calendario y su plan/objetivo.
 
