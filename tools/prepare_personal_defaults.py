@@ -39,7 +39,12 @@ for i,row in enumerate(rows):
  for g,value in zip(headers[1:],row[1:]):
   assert value in ('ABCD' if g.startswith('GR4') else 'TD')
   if value=='D':rest[g.removeprefix('GR')].append(d.isoformat())
-x['calendars']={'2027':{'groups':rest,'holidays':[],'sourceReference':'Calendario_Diario_2027 del libro Evolucion_Cuadros_Franjas_Separadas_Centrado.xlsx. Festivos no incorporados a esta referencia.','verified':True}}
-x['version']='2027-vacaciones-escalafon-descansos-20261028';x['sourceReference']='Escalafón conciliado, vacaciones/PFA y cuadro anual MTE 2027; sin nombres ni DNI.'
+holiday_ref=json.loads((Path(__file__).parent/'data/madrid-festivos-2027.json').read_text())
+assert holiday_ref['year']==2027 and holiday_ref['verified'] is True
+holidays=set(holiday_ref['dates']);assert len(holidays)==14
+for d in holidays:assert date.fromisoformat(d).year==2027
+rest['SDF']=[d.isoformat() for i in range(365) if (d:=date(2027,1,1)+timedelta(days=i)).weekday()>=5 or d.isoformat() in holidays]
+x['calendars']={'2027':{'groups':rest,'holidays':sorted(holidays),'sourceReference':'Calendario_Diario_2027 del libro de cuadros. SDF: sábados, domingos y fiestas laborales del municipio de Madrid (regla confirmada por el usuario). '+holiday_ref['sourceReference']+' '+holiday_ref['sourceUrl'],'verified':True}}
+x['version']='2027-vacaciones-escalafon-descansos-sdf-20261028';x['sourceReference']='Escalafón conciliado, vacaciones/PFA y cuadro anual MTE 2027; sin nombres ni DNI.'
 a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(x,ensure_ascii=False,separators=(',',':')))
 print(json.dumps({'profiles':len(x['entries']),'assigned':sum(e['restGroup'] is not None for e in x['entries']),'missing':sum(e['restGroup'] is None for e in x['entries']),'sourceSha256':hashlib.sha256(a.workbook.read_bytes()).hexdigest(),'groups':dict(Counter(str(e['restGroup']) for e in x['entries']))}))

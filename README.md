@@ -48,8 +48,8 @@ La extracción original contiene 2.084 DNE; la base activa contiene **2.083** tr
 la exclusión indicada. La portada carga las asociaciones por DNE de grupo,
 escalafón, vacaciones, PFA y R.M., sin nombres ni DNI. De los grupos, 2.046 están
 preasignados por el cuadro y 37 permiten elección manual. Los ocho calendarios
-diurnos/nocturnos se vinculan al libro de 2027. SDF conserva su asignación pero
-queda pendiente de un calendario específico; no se inventan festivos para él.
+diurnos/nocturnos se vinculan al libro de 2027. SDF descansa sábados, domingos y los festivos nacionales, autonómicos y locales
+aplicables al municipio de Madrid: 115 fechas distintas de descanso en 2027.
 Cada nuevo año requiere su calendario y su plan/objetivo.
 
 **Introducir un DNE no es autenticarlo.** Esta prueba online incorpora las
