@@ -89,11 +89,18 @@ function chooseDate(date){
 }
 function renderCalendar(result){
   $('calendar').replaceChildren();
+  const missingOpening=result?.budget?.opening==null;
+  $('calendarOpening').hidden=!missingOpening||state.year!==2027;
   $('choiceOrigin').disabled=!result?.calendarReady||!result?.ready;syncChoiceKind(result);
   $('month').disabled=!result?.ready&&!result?.periodsReady;$('periodFilter').disabled=$('month').disabled;
   if((!result?.ready&&!result?.periodsReady)||result?.periodsKnown===false){$('month').disabled=true;$('periodFilter').disabled=true;$('calendarHelp').textContent=result?.reason??'Faltan los periodos y el calendario del año. Puedes declarar un total de jornadas en Cómputo.';return;}
   $('calendarHelp').textContent=`Pulsa un día para añadirlo o retirarlo. Cómputo de ${state.year-1}: lunes a domingo. Días de ${state.year}: lunes a viernes, incluidos festivos. Petición de febrero a diciembre y sujeta a cupo. Esta prueba no reserva fechas en Metro.`;
   if(!result.calendarReady)$('calendarHelp').textContent=(periodsModified(result.plan)?'Vacaciones y PFA modificados en el escenario; R.M. conserva su fecha de origen. ':'Vacaciones, PFA y R.M. extraídos del PDF. ')+result.reason+' Los demás días no tienen descanso/trabajo determinado; las elecciones de fechas quedan pendientes. Puedes estimar el balance con un total de jornadas en Cómputo.';
+  if(result.calendarReady&&missingOpening)$('calendarHelp').textContent='La selección está pendiente del saldo anterior. Indícalo abajo o prueba expresamente con saldo cero.';
+  else if(result.calendarReady&&result.ready){
+    const available=$('choiceOrigin').value==='current'?result.currentRemainingMinutes:result.unresolvedOpeningMinutes;
+    if(available!=null&&Math.abs(available)<result.plan.dailyMinutes)$('calendarHelp').textContent='No quedan jornadas completas disponibles en el saldo seleccionado. Puedes retirar elecciones o cambiar el saldo al que se aplica.';
+  }
   $('workLegend').textContent=result.calendarReady?'Trabajo':'Descanso/trabajo pendiente';
   for(let month=0;month<12;month++){
     if(state.month!=='all'&&Number(state.month)!==month)continue;
@@ -263,3 +270,6 @@ async function loadDefaults(){
  catch{if(!state.dataset)$('datasetStatus').textContent='Carga el archivo privado para recuperar tus asignaciones o abre el ejemplo ficticio.';}
 }
 syncEntry();loadDefaults();
+
+$('calendarEnterOpening').onclick=()=>{state.view='compute';render();$('openingForm').scrollIntoView({block:'center',behavior:'smooth'});$('openingAmount').focus({preventScroll:true});};
+$('calendarZeroOpening').onclick=()=>{state.calculationOptions.opening2026Minutes=0;syncComputationForms();render();setNotice('Simulación con saldo anterior cero. Puedes modificarlo en Cómputo.');};
