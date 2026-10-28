@@ -4,14 +4,16 @@
 <header class="app-header"><a href="./" class="brand" aria-label="SCMM · Mi calendario"><img src="./assets/scmm-logo.svg" alt="SCMM" width="68" height="68"><span>Mi calendario<small>Simulador MTE</small></span></a><div class="header-actions"><button id="theme" class="icon-button" aria-label="Cambiar apariencia">◐</button><button id="exit" hidden>Salir</button></div></header>
 <main id="entry" class="entry">
   <section class="welcome"><span class="eyebrow">Tu año, de un vistazo</span><h1>Elige tus días.<br>Entiende tu calendario.</h1><p>Consulta tu posición en el sorteo, conserva tu grupo de descanso y prueba cómo tus elecciones cambian el balance de cada año.</p><ul class="welcome-list"><li><span>01</span> Identifícate con tu DNE.</li><li><span>02</span> Introduce las cinco cifras del sorteo.</li><li><span>03</span> Elige días y compara el resultado.</li></ul></section>
-  <section class="entry-card"><h2>Tu simulación</h2><p id="datasetStatus">Base MTE preparada: 2.083 DNE. Para esta prueba puedes cargar el archivo privado o entrar en el ejemplo ficticio.</p>
+  <section class="entry-card"><h2>Tu simulación</h2><p id="datasetStatus">Cargando las asignaciones de 2027…</p>
     <form id="entryForm"><label for="dne">DNE de maquinista</label><input id="dne" name="dne" inputmode="numeric" autocomplete="off" maxlength="10" placeholder="Introduce tu DNE" required>
+    <label for="entryRestGroup">Grupo de descanso · 2027</label><select id="entryRestGroup" aria-describedby="entryRestHelp"><option value="">Selecciona tu grupo</option></select><p id="entryRestHelp" class="help"></p>
+    <label>Vacaciones y PFA · 2027</label><p id="entryPeriodSummary" class="help" role="status"></p><div id="entryPeriodManual"><label for="entryPeriod">Periodo del documento de vacaciones</label><select id="entryPeriod"><option value="">Selecciona tu periodo</option></select></div>
     <label for="lotteryMode">Referencia del número</label><select id="lotteryMode"><option value="once">ONCE · simulación</option><option value="random">Número aleatorio · simulación</option><option value="nino">Sorteo del Niño 2027 · escenario</option></select>
     <label for="lottery">Número de cinco cifras</label><div class="input-action"><input id="lottery" name="lottery" inputmode="numeric" maxlength="5" pattern="[0-9]{5}" value="00000" required><button type="button" id="random">Generar</button></div>
     <p class="help">El acta utiliza el Sorteo del Niño del 06/01/2027. La ONCE y el número aleatorio permiten explorar escenarios; introducir un número no lo acredita como resultado oficial.</p>
     <button class="primary wide" type="submit">Abrir mi calendario <span aria-hidden="true">→</span></button></form>
     <p id="entryError" class="error" role="alert"></p><div class="entry-footer"><button id="load" class="text-button">Cargar archivo privado</button><button id="demo" class="text-button">Ver ejemplo ficticio</button><input type="file" id="datasetFile" accept=".json,.csv,application/json,text/csv" hidden></div>
-    <p class="help">Los archivos de esta prueba se leen en el navegador. No se publican ni se envían al asistente. La prueba online no publica la plantilla. El grupo de descanso se carga desde su referencia y no se elige manualmente.</p>
+    <p class="help">Se cargan las asignaciones por DNE de 2027, sin nombres ni DNI. Si no tienes preasignación, puedes indicar tu grupo y tus periodos para esta simulación. Los archivos privados que cargues se leen solo en tu navegador.</p>
   </section>
 </main>
 <div id="workspace" hidden>

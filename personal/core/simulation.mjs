@@ -3,6 +3,7 @@ import {overridePlan} from './dataset.mjs';
 import {actaLedger,validateOptions} from './regularization.mjs';
 export function restoreSimulation(raw,dataset,profile){
   if(raw?.schema!=='scmm-personal-simulation-v1'||raw.datasetVersion!==dataset.version||raw.dne!==profile.dne||raw.demo!==dataset.demo)throw Error('Esta simulación no corresponde al DNE y a la versión del archivo cargado.');
+  if(raw.profileSetup&&(raw.profileSetup.restGroup!==profile.restGroup||JSON.stringify(raw.profileSetup.plan2027)!==JSON.stringify(profile.years[2027])))throw Error('El grupo o los periodos de partida no coinciden con la simulación guardada.');
   lotteryNumber(raw.lottery?.number);
   if(!['once','random','nino'].includes(raw.lottery.mode))throw Error('Referencia de sorteo no válida.');
   if(!raw.overrides||typeof raw.overrides!=='object'||Array.isArray(raw.overrides))throw Error('Faltan las elecciones guardadas.');

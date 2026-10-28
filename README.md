@@ -78,3 +78,7 @@ se prepara con `python tools/build_personal_preview.py /ruta/externa/vacia`: sol
 código público y ejemplo ficticio. No subas allí el archivo de perfiles reales.
 
 [Reglas y límites del nuevo cómputo](docs/2026-10-28-prueba-online-computo.md).
+
+La portada de la prueba incorpora la preasignación de grupo, vacaciones y PFA por
+DNE para 2027, con selección manual cuando falta la referencia. Véase
+[la integración de grupos y periodos](docs/2026-10-28-preasignacion-grupos-periodos.md).

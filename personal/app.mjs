@@ -1,3 +1,4 @@
+import {enroll,REST_GROUPS,groupLabel} from './core/enrollment.mjs';
 import {validateDataset,profileFor,rosterCsvToDataset,overridePlan} from './core/dataset.mjs';
 import {dne,lotteryNumber,randomLottery,drawRoster,annualPreference,annualRosterOrder,slotAt,evidence} from './core/rotation.mjs';
 import {yearLedger,amount} from './core/balance.mjs';
@@ -26,8 +27,7 @@ function enter(event){
   event?.preventDefault();$('entryError').textContent='';
   try{
     if(!state.dataset)throw Error('Todavía no está cargado el nuevo escalafón. Puedes revisar el ejemplo ficticio mientras se incorpora.');
-    const id=dne($('dne').value);lotteryNumber($('lottery').value);const profile=profileFor(state.dataset,id);
-    if(!profile)throw Error('Ese DNE no figura en el archivo cargado.');
+    const id=dne($('dne').value);lotteryNumber($('lottery').value);const profile=enroll(state.dataset,id,$('entryRestGroup').value,$('entryPeriod').value);
     state.profile=profile;state.number=$('lottery').value;state.mode=$('lotteryMode').value;state.year=2027;state.overrides={};state.view='compute';state.calculationOptions={opening2026Minutes:null,yearlyTotals:{}};state.month='all';state.period='all';$('periodFilter').value='all';$('month').value='all';
     state.draw=state.dataset.rosterReady?drawRoster(state.dataset.entries,state.number):[];$('entry').hidden=true;$('workspace').hidden=false;$('exit').hidden=false;$('profileDetails').open=!matchMedia('(max-width:900px)').matches;
     syncComputationForms();render();window.scrollTo(0,0);
@@ -37,7 +37,7 @@ function periodsModified(plan){const original=state.profile?.years[state.year];r
 function renderProfile(result){
   const p=state.profile,person=state.draw.find(e=>e.dne===p.dne),preference=person?annualPreference(person.assignment,state.year):null,annualOrder=person?annualRosterOrder(state.draw,state.year).find(e=>e.dne===p.dne):null;
   $('profileDne').textContent=`DNE ${p.dne}`;
-  $('profileFacts').replaceChildren(fact('Grupo de descanso',p.restGroup?'G'+p.restGroup+' · fijo':'Pendiente de carga'),fact('Escalafón',p.seniorityRank??'Pendiente'),fact('Número simulado',state.number),fact('Orden inicial del sorteo',person?`${person.lotteryOrder} / ${state.draw.length}`:'Pendiente de escalafón'),fact('Asignación personal',person?`B${person.assignment.initialBlock} · ${person.assignment.group}${person.assignment.subgroup}`:'Pendiente de escalafón'),fact('Preferencia '+state.year,preference?`B${preference.block} · ${preference.withinBlockPriority}/12`:'Pendiente'),fact('Puesto anual simulado',annualOrder?`${annualOrder.simulatedAnnualOrder} / ${state.draw.length}`:'Pendiente'));
+  $('profileFacts').replaceChildren(fact('Grupo de descanso',p.restGroup?groupLabel(p.restGroup)+(profileFor(state.dataset,p.dne)?.restGroup!=null?' · preasignado':' · declarado'):'Pendiente de carga'),fact('Escalafón',p.seniorityRank??'Pendiente'),fact('Número simulado',state.number),fact('Orden inicial del sorteo',person?`${person.lotteryOrder} / ${state.draw.length}`:'Pendiente de escalafón'),fact('Asignación personal',person?`B${person.assignment.initialBlock} · ${person.assignment.group}${person.assignment.subgroup}`:'Pendiente de escalafón'),fact('Preferencia '+state.year,preference?`B${preference.block} · ${preference.withinBlockPriority}/12`:'Pendiente'),fact('Puesto anual simulado',annualOrder?`${annualOrder.simulatedAnnualOrder} / ${state.draw.length}`:'Pendiente'));
   const plan=result?.periodsKnown===false?null:result?.plan??p.years[state.year];
   $('vacations').textContent=datesText(plan?.vacations);$('pfa').textContent=datesText(plan?.pfa);
   $('medicalRest').textContent=plan?(plan.medicalRestDates?.length?plan.medicalRestDates.map(displayDate).join(' · '):'Sin fecha importada'):'Pendiente';
@@ -59,7 +59,7 @@ function renderPeriodAnalysis(result){
 function renderMetrics(result){
   const next=state.year+1;
   if(!result?.ready&&result?.periodsReady){$('metrics').replaceChildren(metric('Vacaciones',`${periodDays(result.plan.vacations)} d`,'Incluye los 7 días iniciales del invierno de 28 días, cuando corresponde.'),metric('Fiestas agrupadas',`${periodDays(result.plan.pfa)} d`,'PFA separado de vacaciones; días naturales.'),metric('Descanso R.M.',`${result.plan.medicalRestDates?.length??0} d`,result.reason));return;}
-  if(!result?.ready){const carry=result?.projectedFromPreviousYear??null;$('metrics').replaceChildren(metric('Datos del año','Pendientes',result?.reason??'Falta el plan anual.'),metric('Proyección recibida',amount(carry),`Generada en ${state.year-1}; no es un saldo publicado.`,signClass(carry)),metric('Grupo de descanso',state.profile.restGroup?'G'+state.profile.restGroup:'Pendiente','Dato importado, sin selector manual.'));return;}
+  if(!result?.ready){const carry=result?.projectedFromPreviousYear??null;$('metrics').replaceChildren(metric('Datos del año','Pendientes',result?.reason??'Falta el plan anual.'),metric('Proyección recibida',amount(carry),`Generada en ${state.year-1}; no es un saldo publicado.`,signClass(carry)),metric('Grupo de descanso',groupLabel(state.profile.restGroup),'Preasignación documental o grupo declarado cuando falta.'));return;}
   $('metrics').replaceChildren(metric('Trabajo previsto',`${result.plannedWorkDays} d`,`${hours(result.workMinutes)} · objetivo: ${hours(result.annualTargetMinutes)}`),metric(`Proyección para ${next}`,amount(result.projectedNextYearMinutes,result.plan.dailyMinutes),result.annualTargetMinutes==null?'Falta el objetivo anual para calcular el balance.':'Saldo provisional generado este año.',signClass(result.projectedNextYearMinutes)),metric('Descansos elegidos',`${result.plan.selections.filter(s=>s.kind==='rest_credit').length} d`,`${result.currentWeekdayRests??0} del año en lunes a viernes · saldo anterior por separado.`));
 }
 function allowedDay(day,result){
@@ -164,8 +164,8 @@ $('random').onclick=()=>{$('lottery').value=randomLottery();$('lotteryMode').val
 $('lotteryMode').onchange=()=>{if($('lotteryMode').value==='random')$('lottery').value=randomLottery();};
 $('demo').onclick=()=>{state.dataset=demoDataset();$('dne').value=state.dataset.entries[0].dne;$('lottery').value='00000';$('lotteryMode').value='random';$('datasetStatus').textContent='Ejemplo ficticio: no contiene datos de maquinistas.';enter();};
 $('load').onclick=()=>$('datasetFile').click();
-$('datasetFile').onchange=async()=>{const file=$('datasetFile').files[0];if(!file)return;try{if(file.size>10_000_000)throw Error('El archivo supera 10 MB.');const content=await file.text();state.dataset=file.name.toLowerCase().endsWith('.csv')?rosterCsvToDataset(content):validateDataset(JSON.parse(content));$('datasetStatus').textContent=`Archivo cargado: ${state.dataset.entries.length} DNE. ${state.dataset.rosterReady?'':'Escalafón pendiente; los periodos pueden consultarse. '}${state.dataset.sourceReference}`;$('entryError').textContent='';}catch(error){$('entryError').textContent=error.message;}finally{$('datasetFile').value='';}};
-$('exit').onclick=()=>{state.profile=null;state.draw=[];state.overrides={};state.calculationOptions={opening2026Minutes:null,yearlyTotals:{}};$('workspace').hidden=true;$('entry').hidden=false;$('exit').hidden=true;$('dne').value='';window.scrollTo(0,0);};
+$('datasetFile').onchange=async()=>{const file=$('datasetFile').files[0];if(!file)return;try{if(file.size>10_000_000)throw Error('El archivo supera 10 MB.');const content=await file.text();state.dataset=file.name.toLowerCase().endsWith('.csv')?rosterCsvToDataset(content):validateDataset(JSON.parse(content));$('datasetStatus').textContent=`Archivo cargado: ${state.dataset.entries.length} DNE. ${state.dataset.rosterReady?'':'Escalafón pendiente; los periodos pueden consultarse. '}${state.dataset.sourceReference}`;$('entryError').textContent='';}catch(error){$('entryError').textContent=error.message;}finally{$('datasetFile').value='';syncEntry();}};
+$('exit').onclick=()=>{state.profile=null;state.draw=[];state.overrides={};state.calculationOptions={opening2026Minutes:null,yearlyTotals:{}};$('workspace').hidden=true;$('entry').hidden=false;$('exit').hidden=true;$('dne').value='';syncEntry();if(state.dataset?.demo){state.dataset=null;loadDefaults();}window.scrollTo(0,0);};
 $('previousYear').onclick=()=>setYear(state.year-1);$('nextYear').onclick=()=>setYear(state.year+1);$('year').onchange=()=>setYear(Number($('year').value));
 $('choiceOrigin').onchange=()=>renderCalendar(current());
 for(let i=0;i<12;i++){const option=node('option',months[i]);option.value=i;$('month').append(option);}
@@ -177,7 +177,7 @@ $('addVacation').onclick=()=>rangeRow($('vacationRows'),'Vacaciones');$('addPfa'
 $('periodForm').onsubmit=event=>{event.preventDefault();try{applyPeriods(readRows('vacationRows'),readRows('pfaRows'));$('periodDialog').close();}catch(error){$('periodError').textContent=error.message;}};
 $('restorePeriods').onclick=()=>{const plan=state.profile.years[state.year];try{applyPeriods(plan.vacations,plan.pfa);}catch(error){setNotice(error.message);}};
 $('resetChoices').onclick=()=>{state.overrides[state.year]={...(state.overrides[state.year]??{}),selections:[]};render();setNotice('Se han vaciado las elecciones de este año. La preasignación importada se conserva.');};
-$('download').onclick=()=>{const result={schema:'scmm-personal-simulation-v1',datasetVersion:state.dataset.version,dne:state.profile.dne,lottery:{number:state.number,mode:state.mode},overrides:state.overrides,calculationOptions:state.calculationOptions,policyVersion:POLICY.version,exportedAt:new Date().toISOString(),demo:state.dataset.demo};const url=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'}));const a=node('a');a.href=url;a.download=`simulacion-mte-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;a.click();URL.revokeObjectURL(url);};
+$('download').onclick=()=>{const result={schema:'scmm-personal-simulation-v1',datasetVersion:state.dataset.version,dne:state.profile.dne,lottery:{number:state.number,mode:state.mode},overrides:state.overrides,calculationOptions:state.calculationOptions,policyVersion:POLICY.version,profileSetup:{restGroup:state.profile.restGroup,plan2027:state.profile.years[2027]},exportedAt:new Date().toISOString(),demo:state.dataset.demo};const url=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'}));const a=node('a');a.href=url;a.download=`simulacion-mte-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;a.click();URL.revokeObjectURL(url);};
 $('restoreSimulation').onclick=()=>$('simulationFile').click();
 $('simulationFile').onchange=async()=>{const file=$('simulationFile').files[0];if(!file)return;try{
  if(file.size>500000)throw Error('El archivo de simulación supera el tamaño permitido.');
@@ -244,3 +244,21 @@ for(let i=0;i<12;i++){const option=node('option',months[i]);option.value=i+1;$('
 const themes=['system','light','dark'];let theme='system';try{retireLegacyRoster(localStorage);theme=localStorage.getItem('scmm.theme')??'system';}catch{};if(!themes.includes(theme))theme='system';const media=matchMedia('(prefers-color-scheme: dark)');
 function applyTheme(){document.documentElement.dataset.theme=theme==='system'?(media.matches?'dark':'light'):theme;$('theme').setAttribute('aria-label','Apariencia: '+{system:'Sistema',light:'Claro',dark:'Oscuro'}[theme]+'. Cambiar apariencia.');}
 $('theme').onclick=()=>{theme=themes[(themes.indexOf(theme)+1)%themes.length];try{if(theme==='system')localStorage.removeItem('scmm.theme');else localStorage.setItem('scmm.theme',theme);}catch{}applyTheme();};media.addEventListener('change',applyTheme);applyTheme();
+
+for(const g of REST_GROUPS){const option=node('option',groupLabel(g));option.value=String(g);$('entryRestGroup').append(option);}
+for(const period of periodCatalog.periods){const option=node('option',`${period.code} · ${datesText(period.vacations)} · PFA ${datesText(period.pfa)}`);option.value=period.code;$('entryPeriod').append(option);}
+function syncEntry(){
+ let profile=null;try{profile=state.dataset?profileFor(state.dataset,$('dne').value):null;}catch{}
+ const imported=profile?.restGroup!=null,plan=profile?.years[2027],hasPeriods=Boolean(plan&&(plan.vacations.length||plan.pfa.length));
+ $('entryRestGroup').disabled=imported;$('entryRestGroup').required=!imported;$('entryRestGroup').value=imported?String(profile.restGroup):'';
+ $('entryRestHelp').textContent=imported?'Grupo preasignado por el cuadro de servicio de 2027.': 'Sin grupo en el cuadro de 2027 para este DNE: selecciona el tuyo.';
+ $('entryPeriodManual').hidden=hasPeriods;$('entryPeriod').required=!hasPeriods;$('entryPeriod').disabled=hasPeriods;
+ $('entryPeriodSummary').textContent=hasPeriods?`Vacaciones: ${datesText(plan.vacations)}. PFA: ${datesText(plan.pfa)}. ${plan.periodLabel??''}`:'Sin preasignación documental: elige un periodo del PDF o introduce tus fechas después de entrar.';
+ if(!hasPeriods)$('entryPeriod').value='';
+}
+$('dne').addEventListener('input',syncEntry);
+async function loadDefaults(){
+ try{const response=await fetch('./data/default-dataset.json',{cache:'no-store'});if(!response.ok)throw Error('No disponible');const dataset=validateDataset(await response.json());if(state.dataset)return;state.dataset=dataset;$('datasetStatus').textContent=`Datos de 2027 preparados: ${dataset.entries.length.toLocaleString('es-ES')} DNE. Introduce tu DNE para recuperar el grupo, las vacaciones y el PFA.`;syncEntry();}
+ catch{if(!state.dataset)$('datasetStatus').textContent='Carga el archivo privado para recuperar tus asignaciones o abre el ejemplo ficticio.';}
+}
+syncEntry();loadDefaults();
