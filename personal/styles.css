@@ -11,3 +11,6 @@
 @media(max-width:900px){.form-grid{grid-template-columns:1fr 1fr}.target-reference{grid-column:1/-1}}@media(max-width:560px){.form-grid,.rule-pair{grid-template-columns:1fr}.form-actions button{width:100%}.calculation-rules{padding-left:18px}.rule-pair{gap:0}}
 
 #computationBreakdown{grid-template-columns:repeat(2,minmax(0,1fr))}@media(max-width:560px){#computationBreakdown{grid-template-columns:1fr}}
+
+#calendarPools{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:520px){#calendarPools .value{font-size:1.25rem}}

@@ -1,3 +1,4 @@
+import {automaticChoice,allocateChoices} from './core/automatic-choices.mjs';
 import {enroll,REST_GROUPS,groupLabel} from './core/enrollment.mjs';
 import {validateDataset,profileFor,rosterCsvToDataset,overridePlan} from './core/dataset.mjs';
 import {dne,lotteryNumber,randomLottery,drawRoster,annualPreference,annualRosterOrder,slotAt,evidence} from './core/rotation.mjs';
@@ -67,39 +68,32 @@ function allowedDay(day,result){
   if(!result?.calendarReady||!result?.ready)return false;
   if(day.selection)return true;
   if(day.date.slice(5)<'02-01'||day.vacation||day.pfa||day.medicalRest)return false;
-  const current=$('choiceOrigin').value==='current',available=current?result.currentRemainingMinutes:result.unresolvedOpeningMinutes;
-  if(available==null||available===0||Math.abs(available)<result.plan.dailyMinutes)return false;
-  if(current&&[0,6].includes(day.weekday))return false;
-  if($('choiceKind').value==='rest_credit'&&(day.rest||available<0))return false;
-  if($('choiceKind').value==='work_debit'&&(!day.rest||available>0||current))return false;
-  return true;
-}
-function syncChoiceKind(result){
- const current=$('choiceOrigin').value==='current',balance=current?result?.currentRemainingMinutes:result?.unresolvedOpeningMinutes;
- $('choiceKind').value=current||balance==null||balance>=0?'rest_credit':'work_debit';
- $('choiceKind').disabled=true;
+  return Boolean(automaticChoice(day,state.year,result.currentRemainingMinutes,result.unresolvedOpeningMinutes,result.plan.dailyMinutes));
 }
 function chooseDate(date){
   const old=state.overrides[state.year]??{},result=current();if(!result?.ready)return;
-  const choices=[...(old.selections??[])],i=choices.findIndex(s=>s.date===date);
-  if(i>=0)choices.splice(i,1);else choices.push({date,kind:$('choiceKind').value,originYear:$('choiceOrigin').value==='previous'?state.year-1:state.year});
-  const proposed={...old,selections:choices};
-  try{overridePlan(state.profile,state.year,proposed);state.overrides[state.year]=proposed;const check=current();if(!check.ready)throw Error(check.reason);render();$('calendar').querySelector(`[data-date="${date}"]`)?.focus({preventScroll:true});}
+  try{
+    const dates=(old.selections??[]).map(s=>s.date),i=dates.indexOf(date);
+    if(i>=0)dates.splice(i,1);else dates.push(date);
+    const selections=allocateChoices(dates,result.daily,state.year,result.budget,result.plan.dailyMinutes);
+    const proposed={...old,selections};overridePlan(state.profile,state.year,proposed);state.overrides[state.year]=proposed;const check=current();if(!check.ready)throw Error(check.reason);render();$('calendar').querySelector(`[data-date="${date}"]`)?.focus({preventScroll:true});}
   catch(error){state.overrides[state.year]=old;setNotice(error.message);}
 }
 function renderCalendar(result){
   $('calendar').replaceChildren();
   const missingOpening=result?.budget?.opening==null;
   $('calendarOpening').hidden=!missingOpening||state.year!==2027;
-  $('choiceOrigin').disabled=!result?.calendarReady||!result?.ready;syncChoiceKind(result);
+  const budget=result?.budget;
+  $('calendarPools').replaceChildren(card('Días del año · total',journeys(budget?.currentPool),'Se consumen primero de lunes a viernes.'),card('Cómputo anterior · total',amount(budget?.previousPool),'Se usa en fin de semana o al agotar los días del año.'),card('Días del año · restantes',journeys(result?.currentRemainingMinutes),'Se actualiza al marcar o desmarcar.'),card('Cómputo anterior · restante',amount(result?.unresolvedOpeningMinutes),'Se actualiza al marcar o desmarcar.'));
+
   $('month').disabled=!result?.ready&&!result?.periodsReady;$('periodFilter').disabled=$('month').disabled;
   if((!result?.ready&&!result?.periodsReady)||result?.periodsKnown===false){$('month').disabled=true;$('periodFilter').disabled=true;$('calendarHelp').textContent=result?.reason??'Faltan los periodos y el calendario del año. Puedes declarar un total de jornadas en Cómputo.';return;}
-  $('calendarHelp').textContent=`Pulsa un día para añadirlo o retirarlo. Cómputo de ${state.year-1}: lunes a domingo. Días de ${state.year}: lunes a viernes, incluidos festivos. Petición de febrero a diciembre y sujeta a cupo. Esta prueba no reserva fechas en Metro.`;
+  $('calendarHelp').textContent=`Pulsa un día para añadirlo o retirarlo. De lunes a viernes se consumen primero los días del año; los del cómputo anterior se usan después o en fin de semana. Cómputo de ${state.year-1}: lunes a domingo. Días de ${state.year}: lunes a viernes, incluidos festivos. Petición de febrero a diciembre y sujeta a cupo. Esta prueba no reserva fechas en Metro.`;
   if(!result.calendarReady)$('calendarHelp').textContent=(periodsModified(result.plan)?'Vacaciones y PFA modificados en el escenario; R.M. conserva su fecha de origen. ':'Vacaciones, PFA y R.M. extraídos del PDF. ')+result.reason+' Los demás días no tienen descanso/trabajo determinado; las elecciones de fechas quedan pendientes. Puedes estimar el balance con un total de jornadas en Cómputo.';
   if(result.calendarReady&&missingOpening)$('calendarHelp').textContent='La selección está pendiente del saldo anterior. Indícalo abajo o prueba expresamente con saldo cero.';
   else if(result.calendarReady&&result.ready){
-    const available=$('choiceOrigin').value==='current'?result.currentRemainingMinutes:result.unresolvedOpeningMinutes;
-    if(available!=null&&Math.abs(available)<result.plan.dailyMinutes)$('calendarHelp').textContent='No quedan jornadas completas disponibles en el saldo seleccionado. Puedes retirar elecciones o cambiar el saldo al que se aplica.';
+    const available=Math.max(result.currentRemainingMinutes??0,Math.abs(result.unresolvedOpeningMinutes??0));
+    if(available!=null&&Math.abs(available)<result.plan.dailyMinutes)$('calendarHelp').textContent='No quedan jornadas completas disponibles en el saldo seleccionado. Puedes retirar elecciones o revisar el saldo anterior en Cómputo.';
   }
   $('workLegend').textContent=result.calendarReady?'Trabajo':'Descanso/trabajo pendiente';
   for(let month=0;month<12;month++){
@@ -113,7 +107,7 @@ function renderCalendar(result){
       const label=date.vacation?'Vacaciones':date.pfa?'PFA':date.medicalRest?'Descanso R.M.':date.rest?'Descanso fijo':date.rest==null?'Descanso/trabajo pendiente':'Trabajo';
       const kind=date.selection?.kind;const button=node('button',String(Number(date.date.slice(8))),'day'+(date.vacation?' vacation':date.pfa?' pfa':date.medicalRest?' medical':date.rest?' rest':date.rest==null?' unknown':'')+(date.holiday?' holiday':'')+(kind?' chosen':''));button.type='button';button.dataset.date=date.date;
       if(date.medicalRest)button.append(node('small','RM'));
-      if(kind)button.append(node('small',kind==='rest_credit'?'CR':'DT'));
+      if(kind)button.append(node('small',kind==='work_debit'?'DT':date.selection.originYear===state.year?'Año':'Anterior'));
       button.setAttribute('aria-pressed',String(Boolean(kind)));button.setAttribute('aria-label',`${displayDate(date.date)}, ${dayNames[date.weekday]}. ${label}${date.holiday?', festivo':''}${kind?', elegido '+(kind==='rest_credit'?'descanso':'trabajo'):''}`);
       button.title=button.getAttribute('aria-label');button.disabled=!allowedDay(date,result);button.onclick=()=>chooseDate(date.date);grid.append(button);
     }
@@ -175,7 +169,7 @@ $('load').onclick=()=>$('datasetFile').click();
 $('datasetFile').onchange=async()=>{const file=$('datasetFile').files[0];if(!file)return;try{if(file.size>10_000_000)throw Error('El archivo supera 10 MB.');const content=await file.text();state.dataset=file.name.toLowerCase().endsWith('.csv')?rosterCsvToDataset(content):validateDataset(JSON.parse(content));$('datasetStatus').textContent=`Archivo cargado: ${state.dataset.entries.length} DNE. ${state.dataset.rosterReady?'':'Escalafón pendiente; los periodos pueden consultarse. '}${state.dataset.sourceReference}`;$('entryError').textContent='';}catch(error){$('entryError').textContent=error.message;}finally{$('datasetFile').value='';syncEntry();}};
 $('exit').onclick=()=>{state.profile=null;state.draw=[];state.overrides={};state.calculationOptions={opening2026Minutes:null,yearlyTotals:{}};$('workspace').hidden=true;$('entry').hidden=false;$('exit').hidden=true;$('dne').value='';syncEntry();if(state.dataset?.demo){state.dataset=null;loadDefaults();}window.scrollTo(0,0);};
 $('previousYear').onclick=()=>setYear(state.year-1);$('nextYear').onclick=()=>setYear(state.year+1);$('year').onchange=()=>setYear(Number($('year').value));
-$('choiceOrigin').onchange=()=>renderCalendar(current());
+
 for(let i=0;i<12;i++){const option=node('option',months[i]);option.value=i;$('month').append(option);}
 $('periodFilter').onchange=()=>{state.period=$('periodFilter').value;renderCalendar(current());};
 $('month').onchange=()=>{state.month=$('month').value;renderCalendar(current());};
@@ -215,7 +209,6 @@ function renderComputation(result){
  $('computationBreakdown').replaceChildren(card('Trabajo previsto',work==null?'Pendiente':journeys(work),result?.manualTotals?'Total declarado por ti, ajustado por las elecciones.':'Según tu calendario, vacaciones, PFA, R.M. y elecciones.'),card(`Neto para ${year+1}`,amount(result?.projectedNextYearMinutes),result?.ready?'Descontados los siete días ya adelantados; las compensaciones anteriores se separan.':result?.reason??'Faltan datos.',signClass(result?.projectedNextYearMinutes)));
  $('formulaDetail').textContent=result?.ready?`${journeys(work)} de trabajo previsto − ${journeys(target)} de objetivo ${result.previousSettledMinutes?' + ajuste anterior '+amount(result.previousSettledMinutes):''} − ${journeys(result.unissuedAgainMinutes)} de adelanto todavía no disfrutado = ${amount(result.projectedNextYearMinutes)} netos para el año siguiente.`:'La estimación no convierte en crédito los periodos de vacaciones/PFA ni vuelve a sumar un saldo anterior.';
  $('totalsActive').textContent=result?.targetOrigin==='ordinary_reference'?'El calendario usa la referencia ordinaria de 202 jornadas completas para jornada completa y año completo. Las situaciones especiales requieren su tratamiento específico.':result?.manualTotals?'Esta estimación usa el total de jornadas declarado. El desglose por fecha solo se calcula cuando está disponible el calendario de tu grupo.':'El cálculo por calendario se activa con el grupo fijo, su calendario y el objetivo anual. El total manual permite probar el balance mientras falten esos datos.';
- $('choiceOrigin').options[0].textContent=`Días de ${year} · lunes a viernes`;$('choiceOrigin').options[1].textContent=`Cómputo de ${year-1} · lunes a domingo`;
 }
 function dayNature(d){return d.vacation?'Vacaciones':d.pfa?'PFA':d.medicalRest?'Descanso R.M.':d.selection?(d.selection.kind==='rest_credit'?'Crédito elegido':'Trabajo por débito'):d.rest===null?'Descanso/trabajo pendiente':d.rest?'Descanso fijo':'Trabajo';}
 function renderDayAudit(result){
