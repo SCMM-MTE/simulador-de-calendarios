@@ -1,4 +1,6 @@
-# Formato privado del simulador
+# Formato de datos del simulador
+
+> Estado de la nueva prueba: [grupos y periodos por DNE](../docs/2026-10-28-preasignacion-grupos-periodos.md). Las menciones siguientes a 2.084 registros, escalafón pendiente y ausencia de datos incrustados describen la extracción inicial, anterior a la conciliación y a la incorporación solicitada de asignaciones en la portada. La base activa actual contiene 2.083 DNE.
 
 No subas ficheros nominales al repositorio ni a la carpeta pública de la web.
 El anterior `mtes.xlsx` y el perfil de navegador han sido retirados del árbol

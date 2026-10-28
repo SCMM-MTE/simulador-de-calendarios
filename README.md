@@ -42,23 +42,22 @@ npm run test:personal
 - Importación privada JSON/CSV en memoria; no se guardan plantillas en localStorage
   ni se envían a un servidor. El único ajuste persistente es el tema visual.
 
-## Pendiente antes de utilizar datos reales
+## Datos de 2027 y límites de la prueba
 
-Las vacaciones/PFA y los descansos R.M. de 2027 ya están extraídos del PDF
-aportado: 2.084 DNE, con siete asignaciones especiales por matrimonio. El archivo
-nominal se conserva en privado, separado del código. La base de trabajo ya está conciliada con el escalafón y contiene **2.083 DNE**
-tras la exclusión indicada por el usuario. Los grupos de descanso por DNE
-siguen pendientes de vincular a su referencia. La importación de periodos permite
-ver sus fechas sin inventar grupos, orden de sorteo ni jornadas de trabajo. Los calendarios oficiales de 2027 ya facilitados aún
-necesitan vincularse a este formato; no se sustituyen por los del Convenio ni por
-una proyección de 2026. Cada nuevo año requiere su calendario y su plan/objetivo.
+La extracción original contiene 2.084 DNE; la base activa contiene **2.083** tras
+la exclusión indicada. La portada carga las asociaciones por DNE de grupo,
+escalafón, vacaciones, PFA y R.M., sin nombres ni DNI. De los grupos, 2.046 están
+preasignados por el cuadro y 37 permiten elección manual. Los ocho calendarios
+diurnos/nocturnos se vinculan al libro de 2027. SDF conserva su asignación pero
+queda pendiente de un calendario específico; no se inventan festivos para él.
+Cada nuevo año requiere su calendario y su plan/objetivo.
 
-El mecanismo definitivo de acceso está pendiente de concretar: cuentas de Consulta
-Convenio o herramienta privada local. **Introducir un DNE no es autenticarlo.**
-Esta versión no sirve perfiles privados desde una API ni publica una plantilla real.
-El grupo es inmutable dentro de la simulación; el archivo local no sustituye una
-fuente oficial protegida en servidor. El aspecto final se ajustará a las capturas
-del portal PAP cuando se aporten.
+**Introducir un DNE no es autenticarlo.** Esta prueba online incorpora las
+asociaciones solicitadas, accesibles desde la web; no ofrece acceso privado ni
+un panel autenticado. Los originales y los archivos de preparación se mantienen
+fuera del repositorio. El grupo documental se conserva fijo; cuando falta se
+puede declarar uno para el escenario. Las importaciones adicionales se leen en
+el navegador. El diseño final se ajustará a las capturas del portal PAP.
 
 Los resultados son escenarios, no adjudicaciones, disponibilidad de cupos ni
 solicitudes presentadas a Metro. No se incluyen automáticamente incidencias
