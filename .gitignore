@@ -36,3 +36,9 @@ yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# Datos nominales y perfiles del navegador: nunca forman parte de la web pública.
+/.edge-headless/
+/mtes.xlsx
+/data-private/
+/imports/

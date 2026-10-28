@@ -1,7 +1,7 @@
 {
   "name": "simulador-de-calendarios",
   "version": "2.0.0",
-  "description": "SCMM Portal de Simuladores - Calendario y Rotación",
+  "description": "SCMM Portal de Simuladores - Calendario y Rotaci\u00f3n",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -10,7 +10,8 @@
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "test:personal": "node --test personal/tests/*.test.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
