@@ -1,0 +1,876 @@
+{
+  "auditDate": "2026-10-28",
+  "timezone": "Europe/Madrid",
+  "applicationModified": false,
+  "deploymentPerformed": false,
+  "git": {
+    "localCommit": "bbbc50033c4d7af3ee0950d369f95d34f5da40ae",
+    "mainCommit": "ed1261a5c181b3a83f32b1393a54d4bb708f6865",
+    "publicRepo": true,
+    "pendingLocalLogoCommit": true
+  },
+  "live": {
+    "pagesUrl": "https://scmm-mte.github.io/simulador-de-calendarios/",
+    "pagesHttp": 200,
+    "liveMatchesMain": true,
+    "liveHtmlSha256": "f56890744e043423c82e1c7fb1477d8b873100e27dbc950cae266cd235a2a1a6",
+    "vercelPrimaryHttp": 404,
+    "vercelProjectsLastProductionError": 4
+  },
+  "workbook": {
+    "sheets": 1,
+    "rows": 1948,
+    "columns": 1,
+    "numericDneCount": 1948,
+    "uniqueDneCount": 1948,
+    "sha256": "2186fafcef9d0772202853d1c97fdfaefda1275e80fb694a84c0abccabd68353",
+    "publicDownloadHttp": 200,
+    "publicDownloadMatchesTracked": true
+  },
+  "publicBrowserArtifacts": {
+    "Network/Cookies": true,
+    "Login Data": true,
+    "Web Data": true,
+    "History": true,
+    "Preferences": true,
+    "trackedFileCount": 276,
+    "contentsRead": false
+  },
+  "tooling": {
+    "typeErrorCount": 99,
+    "typeErrorCodes": {
+      "TS2352": 1,
+      "TS2345": 4,
+      "TS6133": 26,
+      "TS2339": 26,
+      "TS7006": 9,
+      "TS2304": 1,
+      "TS6192": 1,
+      "TS2322": 14,
+      "TS18047": 3,
+      "TS2367": 1,
+      "TS18048": 1,
+      "TS2554": 1,
+      "TS2551": 3,
+      "TS2314": 1,
+      "TS7053": 7
+    },
+    "lint": "passed",
+    "build": "failed",
+    "buildFirstFailure": "src/components/features/Ajustes.tsx:60",
+    "jest": "no tests found; exit 1",
+    "buildIsolated": true,
+    "originalTsconfigRestored": true
+  },
+  "legacy": {
+    "timezone": "Europe/Madrid",
+    "december31Pap": [
+      {
+        "year": 2027,
+        "day": 5,
+        "actual": 87
+      },
+      {
+        "year": 2028,
+        "day": 0,
+        "actual": 66
+      }
+    ],
+    "weights": {
+      "summer": 1,
+      "pfa": 0.9999600000000001,
+      "peopleAt2100": 2099.916
+    },
+    "slotChecks": [
+      {
+        "total": 1,
+        "slots": 1,
+        "unique": 1
+      },
+      {
+        "total": 12,
+        "slots": 12,
+        "unique": 12
+      },
+      {
+        "total": 13,
+        "slots": 13,
+        "unique": 13
+      },
+      {
+        "total": 155,
+        "slots": 155,
+        "unique": 155
+      },
+      {
+        "total": 156,
+        "slots": 156,
+        "unique": 156
+      },
+      {
+        "total": 157,
+        "slots": 157,
+        "unique": 157
+      },
+      {
+        "total": 1948,
+        "slots": 1948,
+        "unique": 1948
+      },
+      {
+        "total": 2100,
+        "slots": 2100,
+        "unique": 2100
+      }
+    ],
+    "pfaDurationIssueCount": 16,
+    "pfaDurationUniqueCases": 8,
+    "pfaDurationExamples": [
+      {
+        "year": 2028,
+        "pfa": "26 Mar - 22 Abr",
+        "group": 0,
+        "expected": 28,
+        "actual": 27
+      },
+      {
+        "year": 2028,
+        "pfa": "26 Mar - 22 Abr",
+        "group": 3,
+        "expected": 28,
+        "actual": 27
+      },
+      {
+        "year": 2028,
+        "pfa": "26 Mar - 22 Abr",
+        "group": 0,
+        "expected": 28,
+        "actual": 27
+      },
+      {
+        "year": 2028,
+        "pfa": "26 Mar - 22 Abr",
+        "group": 3,
+        "expected": 28,
+        "actual": 27
+      },
+      {
+        "year": 2033,
+        "pfa": "26 Mar - 22 Abr",
+        "group": 0,
+        "expected": 28,
+        "actual": 27
+      }
+    ],
+    "importValidation": {
+      "syntheticRows": 4,
+      "accepted": 4,
+      "acceptedHeader": true,
+      "acceptedDuplicate": true,
+      "acceptedNonNumeric": true
+    },
+    "holidaySet2027": [
+      "0-1",
+      "0-6",
+      "4-1",
+      "4-2",
+      "4-15",
+      "7-15",
+      "9-12",
+      "10-1",
+      "10-9",
+      "11-6",
+      "11-8",
+      "11-25",
+      "2-25",
+      "2-26"
+    ],
+    "defaults": {
+      "mte": 2100,
+      "credits": 5,
+      "pap": 11
+    }
+  },
+  "legacyUtcComparison": {
+    "pfaDurationIssueCount": 0
+  },
+  "legacyAdditional": {
+    "rotations": [
+      {
+        "total": 1948,
+        "assigned": 1948,
+        "blockCounts": [
+          150,
+          150,
+          150,
+          150,
+          150,
+          150,
+          150,
+          150,
+          150,
+          150,
+          150,
+          149,
+          149
+        ],
+        "displayedBreakdown": {
+          "bloque": 150,
+          "subbloques": [
+            50,
+            50,
+            50
+          ],
+          "subsubbloques": [
+            13,
+            13,
+            13,
+            13,
+            13,
+            13,
+            12,
+            12,
+            12,
+            12,
+            12,
+            12
+          ],
+          "subbloque": "50 / 50 / 50",
+          "subsubbloque": "13 / 13 / 13 / 13 / 13 / 13 / 12 / 12 / 12 / 12 / 12 / 12",
+          "autoBloque": 150
+        },
+        "unitSizes": {
+          "min": 149,
+          "max": 150
+        }
+      },
+      {
+        "total": 2100,
+        "assigned": 2100,
+        "blockCounts": [
+          162,
+          162,
+          162,
+          162,
+          162,
+          162,
+          162,
+          161,
+          161,
+          161,
+          161,
+          161,
+          161
+        ],
+        "displayedBreakdown": {
+          "bloque": 162,
+          "subbloques": [
+            54,
+            54,
+            54
+          ],
+          "subsubbloques": [
+            14,
+            14,
+            14,
+            14,
+            14,
+            14,
+            13,
+            13,
+            13,
+            13,
+            13,
+            13
+          ],
+          "subbloque": "54 / 54 / 54",
+          "subsubbloque": "14 / 14 / 14 / 14 / 14 / 14 / 13 / 13 / 13 / 13 / 13 / 13",
+          "autoBloque": 162
+        },
+        "unitSizes": {
+          "min": 161,
+          "max": 162
+        }
+      }
+    ],
+    "zeroQuotaAnalysis": [
+      {
+        "day": "0-1",
+        "baseQuota": 0
+      },
+      {
+        "day": "0-4",
+        "baseQuota": 0
+      },
+      {
+        "day": "0-5",
+        "baseQuota": 0
+      },
+      {
+        "day": "0-6",
+        "baseQuota": 0
+      },
+      {
+        "day": "0-7",
+        "baseQuota": 0
+      },
+      {
+        "day": "0-8",
+        "baseQuota": 0
+      },
+      {
+        "day": "0-11",
+        "baseQuota": 0
+      }
+    ]
+  },
+  "allocationConservation": {
+    "cases": 78,
+    "failures": [],
+    "years": [
+      2027,
+      2028,
+      2039
+    ]
+  },
+  "nextRuntimeIsolated": {
+    "pressure": [
+      {
+        "date": "2027-03-01",
+        "base": 1,
+        "changedBaseInputs": 1
+      },
+      {
+        "date": "2027-03-06",
+        "base": 0.8,
+        "changedBaseInputs": 0.8
+      },
+      {
+        "date": "2027-12-08",
+        "base": 0.9,
+        "changedBaseInputs": 0.9
+      },
+      {
+        "date": "2027-05-15",
+        "base": 0.8,
+        "changedBaseInputs": 0.8
+      }
+    ],
+    "holidays": [
+      {
+        "date": "2027-03-01",
+        "isHoliday": false
+      },
+      {
+        "date": "2027-03-06",
+        "isHoliday": false
+      },
+      {
+        "date": "2027-12-08",
+        "isHoliday": false
+      },
+      {
+        "date": "2027-05-15",
+        "isHoliday": false
+      }
+    ],
+    "quota": {
+      "weekday": 30,
+      "saturday": 30,
+      "sunday": 30
+    },
+    "minimalConfigAccepted": true,
+    "invalidPressureAccepted": true,
+    "zeroPressureReplaced": 1.5,
+    "rotationStatsDays365": {
+      "A1": 39,
+      "B1": 39,
+      "C1": 39,
+      "A2": 39,
+      "B2": 39,
+      "C2": 39,
+      "A3": 39,
+      "B3": 39,
+      "C3": 39,
+      "A4": 39,
+      "B4": 39,
+      "C4": 39
+    },
+    "emptyFairnessFinite": false,
+    "apiABC": {
+      "identicalDays": true,
+      "assigned": [
+        101,
+        101,
+        101
+      ],
+      "days": [
+        365,
+        365,
+        365
+      ],
+      "nonZeroQuotas": [
+        0,
+        0,
+        0
+      ]
+    },
+    "invalidCalendarTypeHttp": 200,
+    "rotationAcrossDst": {
+      "unitAtDay13": "A1",
+      "expectedUnit": "B1"
+    },
+    "unboundedRange": {
+      "http": 200,
+      "days": 4019
+    },
+    "groupConservation": {
+      "mte": 1948,
+      "groupSum": 1947
+    },
+    "persistence": {
+      "saveHttp": 201,
+      "before": 2100,
+      "after": 2100
+    },
+    "txtRoundTrip": {
+      "exportHttp": 200,
+      "importHttp": 400
+    }
+  },
+  "nextExcelImport": {
+    "templateRows": 1948,
+    "cellTypes": {
+      "number": 1948
+    },
+    "nextImporterAccepted": 0
+  },
+  "browser": {
+    "syntheticDneOnly": true,
+    "syntheticCount": 1948,
+    "externalFontRequestsBlocked": true,
+    "cachedCdnStylesLoaded": true,
+    "axeVersion": "4.10.3",
+    "views": [
+      {
+        "feature": "Inicio",
+        "errors": [],
+        "accessibility": [],
+        "viewports": [
+          {
+            "width": 1440,
+            "documentWidth": 1440,
+            "bodyWidth": 1440,
+            "smallTargets": 0
+          },
+          {
+            "width": 768,
+            "documentWidth": 768,
+            "bodyWidth": 768,
+            "smallTargets": 0
+          },
+          {
+            "width": 375,
+            "documentWidth": 375,
+            "bodyWidth": 375,
+            "smallTargets": 0
+          },
+          {
+            "width": 320,
+            "documentWidth": 320,
+            "bodyWidth": 320,
+            "smallTargets": 0
+          }
+        ]
+      },
+      {
+        "feature": "Calendario A",
+        "errors": [],
+        "accessibility": [
+          {
+            "id": "scrollable-region-focusable",
+            "impact": "serious",
+            "help": "Scrollable region must have keyboard access",
+            "count": 2,
+            "examples": [
+              [
+                ".max-h-40"
+              ],
+              [
+                ".p-3"
+              ]
+            ]
+          },
+          {
+            "id": "select-name",
+            "impact": "critical",
+            "help": "Select element must have an accessible name",
+            "count": 6,
+            "examples": [
+              [
+                ".gap-2.flex:nth-child(1) > .flex-1:nth-child(1) > select"
+              ],
+              [
+                ".gap-2.flex:nth-child(1) > .flex-1:nth-child(2) > select"
+              ],
+              [
+                ".gap-2.flex:nth-child(2) > .flex-1:nth-child(1) > select"
+              ]
+            ]
+          }
+        ],
+        "viewports": [
+          {
+            "width": 1440,
+            "documentWidth": 1440,
+            "bodyWidth": 1440,
+            "smallTargets": 1
+          },
+          {
+            "width": 768,
+            "documentWidth": 768,
+            "bodyWidth": 768,
+            "smallTargets": 3
+          },
+          {
+            "width": 375,
+            "documentWidth": 388,
+            "bodyWidth": 388,
+            "smallTargets": 1
+          },
+          {
+            "width": 320,
+            "documentWidth": 388,
+            "bodyWidth": 388,
+            "smallTargets": 1
+          }
+        ]
+      },
+      {
+        "feature": "Rotación",
+        "errors": [],
+        "accessibility": [
+          {
+            "id": "button-name",
+            "impact": "critical",
+            "help": "Buttons must have discernible text",
+            "count": 1,
+            "examples": [
+              [
+                ".hover\\:text-blue-700"
+              ]
+            ]
+          },
+          {
+            "id": "color-contrast",
+            "impact": "serious",
+            "help": "Elements must meet minimum color contrast ratio thresholds",
+            "count": 1,
+            "examples": [
+              [
+                ".max-w-full"
+              ]
+            ]
+          },
+          {
+            "id": "label",
+            "impact": "critical",
+            "help": "Form elements must have labels",
+            "count": 1,
+            "examples": [
+              [
+                ".w-12"
+              ]
+            ]
+          },
+          {
+            "id": "select-name",
+            "impact": "critical",
+            "help": "Select element must have an accessible name",
+            "count": 8,
+            "examples": [
+              [
+                "div:nth-child(1) > .border-gray-300\\/60"
+              ],
+              [
+                ".space-y-4 > div:nth-child(2) > .border-gray-300\\/60"
+              ],
+              [
+                "div:nth-child(3) > .border-gray-300\\/60"
+              ]
+            ]
+          }
+        ],
+        "viewports": [
+          {
+            "width": 1440,
+            "documentWidth": 1440,
+            "bodyWidth": 1440,
+            "smallTargets": 2008
+          },
+          {
+            "width": 768,
+            "documentWidth": 768,
+            "bodyWidth": 768,
+            "smallTargets": 2008
+          },
+          {
+            "width": 375,
+            "documentWidth": 375,
+            "bodyWidth": 375,
+            "smallTargets": 2008
+          },
+          {
+            "width": 320,
+            "documentWidth": 320,
+            "bodyWidth": 320,
+            "smallTargets": 2008
+          }
+        ]
+      },
+      {
+        "feature": "Analisis",
+        "errors": [],
+        "accessibility": [
+          {
+            "id": "button-name",
+            "impact": "critical",
+            "help": "Buttons must have discernible text",
+            "count": 1,
+            "examples": [
+              [
+                ".p-2"
+              ]
+            ]
+          },
+          {
+            "id": "select-name",
+            "impact": "critical",
+            "help": "Select element must have an accessible name",
+            "count": 2,
+            "examples": [
+              [
+                ".border-gray-200.bg-white\\/70.rounded-lg:nth-child(1) > select"
+              ],
+              [
+                ".border-gray-200.bg-white\\/70.rounded-lg:nth-child(2) > select"
+              ]
+            ]
+          }
+        ],
+        "viewports": [
+          {
+            "width": 1440,
+            "documentWidth": 1440,
+            "bodyWidth": 1440,
+            "smallTargets": 0
+          },
+          {
+            "width": 768,
+            "documentWidth": 768,
+            "bodyWidth": 768,
+            "smallTargets": 0
+          },
+          {
+            "width": 375,
+            "documentWidth": 375,
+            "bodyWidth": 375,
+            "smallTargets": 0
+          },
+          {
+            "width": 320,
+            "documentWidth": 320,
+            "bodyWidth": 320,
+            "smallTargets": 0
+          }
+        ]
+      },
+      {
+        "feature": "Ajustes",
+        "errors": [],
+        "accessibility": [
+          {
+            "id": "button-name",
+            "impact": "critical",
+            "help": "Buttons must have discernible text",
+            "count": 1,
+            "examples": [
+              [
+                ".bg-blue-100"
+              ]
+            ]
+          },
+          {
+            "id": "color-contrast",
+            "impact": "serious",
+            "help": "Elements must meet minimum color contrast ratio thresholds",
+            "count": 5,
+            "examples": [
+              [
+                ".bg-green-600.hover\\:bg-green-700.px-4"
+              ],
+              [
+                ".bg-green-600.hover\\:bg-green-700.self-start"
+              ],
+              [
+                ".toggle-btn"
+              ]
+            ]
+          },
+          {
+            "id": "label",
+            "impact": "critical",
+            "help": "Form elements must have labels",
+            "count": 89,
+            "examples": [
+              [
+                "input[value=\"1948\"]"
+              ],
+              [
+                "input[value=\"150\"]"
+              ],
+              [
+                ".space-y-4 > div:nth-child(4) > input[value=\"3\"][type=\"number\"]"
+              ]
+            ]
+          },
+          {
+            "id": "select-name",
+            "impact": "critical",
+            "help": "Select element must have an accessible name",
+            "count": 4,
+            "examples": [
+              [
+                ".bg-white\\/75.p-3.rounded-xl:nth-child(1) > select"
+              ],
+              [
+                ".bg-white\\/75.p-3.rounded-xl:nth-child(2) > select"
+              ],
+              [
+                ".bg-white\\/75.p-3.rounded-xl:nth-child(3) > select"
+              ]
+            ]
+          }
+        ],
+        "viewports": [
+          {
+            "width": 1440,
+            "documentWidth": 1440,
+            "bodyWidth": 1440,
+            "smallTargets": 42
+          },
+          {
+            "width": 768,
+            "documentWidth": 768,
+            "bodyWidth": 768,
+            "smallTargets": 42
+          },
+          {
+            "width": 375,
+            "documentWidth": 375,
+            "bodyWidth": 375,
+            "smallTargets": 42
+          },
+          {
+            "width": 320,
+            "documentWidth": 320,
+            "bodyWidth": 320,
+            "smallTargets": 55
+          }
+        ]
+      }
+    ],
+    "flows": {
+      "configExport": {
+        "isJson": true,
+        "keys": 110,
+        "dneCount": 1948
+      },
+      "configRoundTrip": {
+        "mte": "2222"
+      },
+      "rotationExcel": {
+        "extension": "xls",
+        "htmlContent": true,
+        "zipXlsx": false,
+        "bytes": 17485
+      },
+      "rotationImage": {
+        "extension": "png",
+        "validPng": true,
+        "bytes": 421684
+      },
+      "analysisLink": {
+        "calendarLoaded": true,
+        "vacationEnabled": true
+      },
+      "errors": []
+    }
+  },
+  "dependencies": {
+    "installedVersions": {
+      "html2canvas": "1.4.1",
+      "jspdf": "2.5.2",
+      "next": "14.2.35",
+      "react-dom": "18.3.1",
+      "react": "18.3.1",
+      "typescript": "5.9.3",
+      "xlsx": "0.18.5",
+      "zustand": "4.5.7"
+    },
+    "packagesScanned": 612,
+    "advisories": 64,
+    "severityCounts": {
+      "moderate": 28,
+      "high": 23,
+      "low": 8,
+      "critical": 5
+    },
+    "packagesWithAdvisories": [
+      "postcss",
+      "glob",
+      "deepmerge",
+      "jspdf",
+      "dompurify",
+      "next",
+      "xlsx"
+    ],
+    "interpretation": "Version matches in installed tree; not demonstrated exploitation of public site; Next and jsPDF not the active Pages runtime."
+  },
+  "cdn": [
+    {
+      "url": "https://unpkg.com/react@18/umd/react.production.min.js",
+      "final_url": "https://unpkg.com/react@18.3.1/umd/react.production.min.js",
+      "bytes": 10751
+    },
+    {
+      "url": "https://unpkg.com/react-dom@18/umd/react-dom.production.min.js",
+      "final_url": "https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js",
+      "bytes": 131835
+    },
+    {
+      "url": "https://unpkg.com/@babel/standalone/babel.min.js",
+      "final_url": "https://unpkg.com/@babel/standalone@8.0.9/babel.min.js",
+      "bytes": 2345070
+    },
+    {
+      "url": "https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js",
+      "final_url": "https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js",
+      "bytes": 881727
+    },
+    {
+      "url": "https://cdn.tailwindcss.com",
+      "final_url": "https://cdn.tailwindcss.com/3.4.17",
+      "bytes": 407279
+    }
+  ],
+  "businessReference": {
+    "papDecember31": {
+      "confirmedByUserOn": "2026-10-25",
+      "weekdaySaturdayHoliday": 55,
+      "sunday": 37,
+      "notPerpetualYearlyCertification": true
+    },
+    "officialCalendars2027": "Previously provided by user; not linked to simulator engine; not substituted by historical Convention calendars."
+  }
+}
