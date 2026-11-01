@@ -30,8 +30,10 @@ export function slotAt(index) {
 }
 export function drawRoster(entries,number) {
   if(!Array.isArray(entries)||entries.length<1||entries.length>20000)throw Error('Carga antes un escalafón válido.');
-  const sorted=entries.map(e=>({...e,dne:dne(e.dne)})).sort((a,b)=>BigInt(a.dne)<BigInt(b.dne)?-1:1);
+  const sorted=entries.map(e=>({...e,dne:dne(e.dne)}));
   if(new Set(sorted.map(e=>e.dne)).size!==sorted.length)throw Error('El escalafón contiene DNE duplicados.');
+  if(sorted.some(e=>!Number.isSafeInteger(e.seniorityRank)||e.seniorityRank<1)||new Set(sorted.map(e=>e.seniorityRank)).size!==sorted.length)throw Error('Falta un orden de escalafón completo y sin duplicados para localizar el DNE por el que empieza el reparto.');
+  sorted.sort((a,b)=>a.seniorityRank-b.seniorityRank);
   const start=initialPosition(number,sorted.length)-1;
   return sorted.map((_,i)=>{const person=sorted[(start+i)%sorted.length];return {...person,lotteryOrder:i+1,assignment:person.officialAssignment??slotAt(i),assignmentOrigin:person.officialAssignment?'Asignación importada; prevalece sobre la simulación del sorteo':'Simulación del reparto inicial según acta'};});
 }

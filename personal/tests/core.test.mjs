@@ -21,10 +21,10 @@ test('Relleno literal del acta: bloques primero, grupo, subgrupo y nueva plaza',
  for(const [i,tuple] of Object.entries(expected))assert.deepEqual(Object.values(slotAt(Number(i))),tuple);
  assert.equal(new Set(Array.from({length:156},(_,i)=>JSON.stringify(slotAt(i)))).size,156);
 });
-test('Sorteo: ceros, extremos, orden numérico de DNE y vuelta circular',()=>{
- const entries=[{dne:'100'},{dne:'2'},{dne:'10'}];
+test('Sorteo: ceros, extremos, orden de escalafón, DNE inicial y vuelta circular',()=>{
+ const entries=[{dne:'100',seniorityRank:2},{dne:'2',seniorityRank:3},{dne:'10',seniorityRank:1}];
  assert.equal(initialPosition('00000',3),1);assert.equal(initialPosition('99999',3),3);
- assert.deepEqual(drawRoster(entries,'99999').map(p=>p.dne),['100','2','10']);
+ assert.deepEqual(drawRoster(entries,'99999').map(p=>p.dne),['2','10','100']);
  assert.equal(lotteryNumber('00001'),1);assert.throws(()=>lotteryNumber('1234'));
  assert.throws(()=>drawRoster([{dne:'2'},{dne:'002'}],'00000'));
  let count=0;assert.equal(randomLottery({getRandomValues:b=>{b[0]=count++?99999:4294967295;}}),'99999');
@@ -32,7 +32,7 @@ test('Sorteo: ceros, extremos, orden numérico de DNE y vuelta circular',()=>{
 test('La asignación importada prevalece; grupo de descanso y escalafón no se sortean',()=>{
  const officialAssignment={initialBlock:7,group:'C',subgroup:3,seat:4,sourceReference:'prueba'};
  for(const number of ['00000','99999']){
-  const p=drawRoster([{dne:'3',restGroup:2,seniorityRank:1,officialAssignment},{dne:'5'}],number).find(p=>p.dne==='3');
+  const p=drawRoster([{dne:'3',restGroup:2,seniorityRank:1,officialAssignment},{dne:'5',seniorityRank:2}],number).find(p=>p.dne==='3');
   assert.deepEqual(p.assignment,officialAssignment);assert.equal(p.restGroup,2);assert.equal(p.seniorityRank,1);
  }
 });

@@ -7,7 +7,7 @@ repo=Path(__file__).resolve().parents[1];target=args.output.resolve()
 if target==repo or repo.is_relative_to(target) or target.is_relative_to(repo):raise SystemExit('Use a separate preview directory outside the repository')
 if target.exists() and any(target.iterdir()):raise SystemExit('Output must be empty')
 target.mkdir(parents=True,exist_ok=True)
-files=['index.html','personal/index.html','personal/app.mjs','personal/styles.css','personal/assets/scmm-logo.svg']+[str(p.relative_to(repo)) for p in sorted((repo/'personal/core').glob('*.mjs'))]
+files=['index.html','personal/index.html','personal/app.mjs','personal/styles.css','personal/learning.css','personal/learning.mjs','personal/assets/scmm-logo.svg']+[str(p.relative_to(repo)) for p in sorted((repo/'personal/core').glob('*.mjs'))]
 for name in files:
  p=target/name;p.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(repo/name,p)
 if args.dataset:
