@@ -14,3 +14,19 @@
 
 #calendarPools{grid-template-columns:repeat(2,minmax(0,1fr))}
 @media(max-width:520px){#calendarPools .value{font-size:1.25rem}}
+
+/* One page: the calendar is primary; supporting information stays optional. */
+.layout{display:block;max-width:1480px;margin-inline:auto}
+.profile{position:static;display:flex;flex-wrap:wrap;align-items:start;gap:1rem;margin-bottom:1rem}
+.profile>details{flex:1;min-width:230px}
+.aside-actions{display:flex;flex-wrap:wrap;gap:.4rem}
+.aside-actions button{width:auto}
+.annual-settings{margin:1rem 0}
+.annual-settings form{margin:0}
+.annual-settings #medicalMode{display:block;max-width:100%;margin:.4rem 0 1rem}
+.annual-settings input[type=checkbox]{width:auto;margin-right:.4rem}
+.optional-detail{margin-top:1rem;border:1px solid var(--border,#dbe3ef);border-radius:16px;padding:1rem}
+.optional-detail>summary{cursor:pointer;font-weight:700;padding:.25rem}
+.optional-detail[open]>summary{margin-bottom:1rem}
+#calendarView{margin-top:1rem}
+@media(max-width:600px){.profile{display:block}.aside-actions{margin-top:.7rem}.optional-detail{padding:.75rem}}

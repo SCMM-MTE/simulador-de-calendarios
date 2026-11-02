@@ -1,3 +1,4 @@
+import {annualScenario,validateYearPlans} from './annual-plan.mjs';
 import {annualBalance} from './balance.mjs';
 import {overridePlan} from './dataset.mjs';
 import {weekday,yearDates} from './dates.mjs';
@@ -12,7 +13,7 @@ export function parseAmount(value,unit='days',sign='credit'){
  return minutes(sign==='zero'?0:(sign==='debit'?-1:1)*rounded,'Saldo de 2026');
 }
 export function validateOptions(raw={}){
- if(!raw||typeof raw!=='object'||Array.isArray(raw)||Object.keys(raw).some(k=>!['opening2026Minutes','yearlyTotals','medicalModes'].includes(k)))throw Error('Configuración de cómputo no válida.');
+ if(!raw||typeof raw!=='object'||Array.isArray(raw)||Object.keys(raw).some(k=>!['opening2026Minutes','yearlyTotals','medicalModes','yearPlans'].includes(k)))throw Error('Configuración de cómputo no válida.');
  const opening2026Minutes=raw.opening2026Minutes==null?null:minutes(raw.opening2026Minutes,'Saldo de 2026');
  const yearlyTotals={};
  if(raw.yearlyTotals!=null&&(typeof raw.yearlyTotals!=='object'||Array.isArray(raw.yearlyTotals)))throw Error('Totales anuales no válidos.');
@@ -26,7 +27,7 @@ export function validateOptions(raw={}){
  }
  const medicalModes=raw.medicalModes??{};
  if(!medicalModes||typeof medicalModes!=='object'||Array.isArray(medicalModes)||Object.entries(medicalModes).some(([year,mode])=>!/^\d{4}$/.test(year)||Number(year)<2027||Number(year)>2100||!['inside','outside'].includes(mode)))throw Error('Modalidad R.M. no válida.');
- return {opening2026Minutes,yearlyTotals,medicalModes:{...medicalModes}};
+ return {opening2026Minutes,yearlyTotals,medicalModes:{...medicalModes},yearPlans:validateYearPlans(raw.yearPlans??{})};
 }
 export function requestBudget(opening,dailyMinutes=480){
  if(opening!=null)minutes(opening,'Saldo anterior');
@@ -79,10 +80,11 @@ export function actaYear(dataset,profile,year,overrides={},opening=null,totals=n
 }
 export function actaLedger(dataset,profile,overrides={},lastYear=2028,rawOptions={}){
  const options=validateOptions(rawOptions),results=[];
+ const scenario=annualScenario(dataset,profile,options.yearPlans);dataset=scenario.dataset;profile=scenario.profile;
  for(let year=2027;year<=lastYear;year++){
   const previous=results.at(-1)?.projectedNextYearMinutes??null,imported=profile.years[year]?.openingBalanceMinutes??null;
   const opening=year===2027?(options.opening2026Minutes??imported):(imported??previous);
-  let r;try{r=actaYear(dataset,profile,year,overrides[year]??{},opening,options.yearlyTotals[year]??null,options.medicalModes[year]??null);}catch(error){r={ready:false,year,invalidPlan:true,reason:error.message,budget:requestBudget(opening)}}
+  let r;try{r=actaYear(dataset,{...profile,restGroup:scenario.restGroups[year]??profile.restGroup},year,overrides[year]??{},opening,options.yearlyTotals[year]??null,options.medicalModes[year]??null);}catch(error){r={ready:false,year,invalidPlan:true,reason:error.message,budget:requestBudget(opening)}}
   r.projectedFromPreviousYear=previous;r.openingOrigin=year===2027&&options.opening2026Minutes!==null?'user':imported!==null?'imported':previous!==null?'projection':'pending';results.push(r);
  }
  return results;

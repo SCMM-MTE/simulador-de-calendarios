@@ -143,3 +143,8 @@ modificaciones del escenario solo admiten `vacations`, `pfa` y `selections`.
 Esto bloquea el cambio de grupo en la aplicación, pero no autentica un archivo
 editado fuera de ella. Una versión compartida con cuentas requiere datos
 autorizados en servidor, verificación de sesión y acceso limitado al propio DNE.
+
+Planes anuales: `calculationOptions.yearPlans` guarda el grupo y el periodo de
+cada escenario anual, separado del perfil original. La vista única permite
+modificarlos sin cambiar la asignación ni el escalafón del DNE. Los calendarios
+y periodos futuros proyectados no se presentan como asignaciones oficiales.

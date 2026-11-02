@@ -81,3 +81,8 @@ código público y ejemplo ficticio. No subas allí el archivo de perfiles reale
 La portada de la prueba incorpora la preasignación de grupo, vacaciones y PFA por
 DNE para 2027, con selección manual cuando falta la referencia. Véase
 [la integración de grupos y periodos](docs/2026-10-28-preasignacion-grupos-periodos.md).
+
+Desde el 02/11/2026, la vista única permite elegir grupo de descanso y vacaciones
+por año, conservando las preasignaciones como referencia inicial. Los años sin
+referencia admiten una proyección explícita, identificada como simulación.
+Detalles y límites en `docs/2026-11-02-vista-unica-y-planes-anuales.md`.
