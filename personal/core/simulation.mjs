@@ -1,3 +1,4 @@
+import {annualScenario} from './annual-plan.mjs';
 import {lotteryNumber} from './rotation.mjs';
 import {overridePlan} from './dataset.mjs';
 import {actaLedger,validateOptions} from './regularization.mjs';
@@ -7,14 +8,15 @@ export function restoreSimulation(raw,dataset,profile){
   lotteryNumber(raw.lottery?.number);
   if(!['once','random','nino'].includes(raw.lottery.mode))throw Error('Referencia de sorteo no válida.');
   if(!raw.overrides||typeof raw.overrides!=='object'||Array.isArray(raw.overrides))throw Error('Faltan las elecciones guardadas.');
+  const calculationOptions=validateOptions(raw.calculationOptions??{});
+  const scenario=annualScenario(dataset,profile,calculationOptions.yearPlans);
   const overrides={};
   for(const [key,changes] of Object.entries(raw.overrides)){
     const year=Number(key);if(!/^\d{4}$/.test(key)||year<2027||year>2100)throw Error('Año de simulación no válido.');
-    const safe=overridePlan(profile,year,changes);
+    const safe=overridePlan(scenario.profile,year,changes);
     overrides[year]={vacations:safe.vacations,pfa:safe.pfa,selections:safe.selections};
   }
-  const calculationOptions=validateOptions(raw.calculationOptions??{});
-  const results=actaLedger(dataset,profile,overrides,Math.max(2027,...Object.keys(overrides).map(Number),...Object.keys(calculationOptions.yearlyTotals).map(Number)),calculationOptions);
+  const results=actaLedger(dataset,profile,overrides,Math.max(2027,...Object.keys(overrides).map(Number),...Object.keys(calculationOptions.yearlyTotals).map(Number),...Object.keys(calculationOptions.yearPlans).map(Number)),calculationOptions);
   if(results.some(r=>r.invalidPlan))throw Error('La simulación contiene elecciones incompatibles con los saldos o periodos cargados.');
   return {overrides,number:raw.lottery.number,mode:raw.lottery.mode,calculationOptions};
 }

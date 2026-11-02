@@ -1,3 +1,4 @@
+import {annualScenario} from './core/annual-plan.mjs';
 import {renderLearning,showDayExplanation,renderDrawStart} from './learning.mjs';
 import {explainedExample} from './core/example-2027.mjs';
 import {automaticChoice,allocateChoices} from './core/automatic-choices.mjs';
@@ -21,7 +22,8 @@ const journeys=(minutes,dailyMinutes=480)=>minutes==null?'Pendiente':`${new Intl
 const amount=(minutes,dailyMinutes=480)=>minutes==null?'Pendiente':`${minutes>0?'+':minutes<0?'−':''}${journeys(Math.abs(minutes),dailyMinutes)}`;
 const signClass=value=>value==null?'':value>0?'positive':value<0?'negative':'';
 const datesText=ranges=>ranges?.length?ranges.map(r=>`${displayDate(r.start)} – ${displayDate(r.end)}`).join(' · '):'Pendiente o sin periodo asignado';
-function ledger(){return actaLedger(state.dataset,state.profile,state.overrides,Math.min(2100,Math.max(state.year+1,...Object.keys(state.profile.years).map(Number),...Object.keys(state.calculationOptions.yearlyTotals).map(Number),2028)),state.calculationOptions);}
+function ledger(){return actaLedger(state.dataset,state.profile,state.overrides,Math.min(2100,Math.max(state.year+1,...Object.keys(state.profile.years).map(Number),...Object.keys(state.calculationOptions.yearlyTotals).map(Number),...Object.keys(state.calculationOptions.yearPlans??{}).map(Number),2028)),state.calculationOptions);}
+function scenarioProfile(){return annualScenario(state.dataset,state.profile,state.calculationOptions.yearPlans??{}).profile;}
 function current(){return ledger().find(r=>r.year===state.year);}
 function setNotice(text){$('notice').textContent=text;}
 function fact(label,value){const row=node('div');row.append(node('dt',label),node('dd',value));return row;}
@@ -33,7 +35,7 @@ function enter(event){
     if(!state.dataset)throw Error('Todavía no está cargado el nuevo escalafón. Puedes revisar el ejemplo ficticio mientras se incorpora.');
     const id=dne($('dne').value);lotteryNumber($('lottery').value);const profile=enroll(state.dataset,id,$('entryRestGroup').value,$('entryPeriod').value);
     state.profile=profile;state.number=$('lottery').value;state.mode=$('lotteryMode').value;state.year=2027;state.overrides={};state.view='compute';state.calculationOptions={opening2026Minutes:null,yearlyTotals:{},medicalModes:{2027:"inside"}};state.month='all';state.period='all';$('periodFilter').value='all';$('month').value='all';
-    state.draw=state.dataset.rosterReady?drawRoster(state.dataset.entries,state.number):[];$('entry').hidden=true;$('workspace').hidden=false;$('exit').hidden=false;$('profileDetails').open=!matchMedia('(max-width:900px)').matches;
+    state.draw=state.dataset.rosterReady?drawRoster(state.dataset.entries,state.number):[];$('entry').hidden=true;$('workspace').hidden=false;$('exit').hidden=false;$('profileDetails').open=false;
     syncComputationForms();render();window.scrollTo(0,0);
   }catch(error){$('entryError').textContent=error.message;}
 }
@@ -42,7 +44,7 @@ function assignedPerson(){return state.draw.find(p=>p.dne===state.profile.dne)??
 function renderProfile(result){
   const p=state.profile,person=assignedPerson(),preference=person?annualPreference(person.assignment,state.year):null,annualOrder=person?annualRosterOrder(state.draw,state.year).find(e=>e.dne===p.dne):null;
   $('profileDne').textContent=`DNE ${p.dne}`;
-  $('profileFacts').replaceChildren(fact('Grupo de descanso',p.restGroup?groupLabel(p.restGroup)+(profileFor(state.dataset,p.dne)?.restGroup!=null?' · preasignado':' · declarado'):'Pendiente de carga'),fact('Escalafón',p.seniorityRank??'Pendiente'),fact('Número simulado',state.number),fact('Orden inicial del sorteo',person?.lotteryOrder!=null?`${person.lotteryOrder} / ${state.draw.length}`:'Pendiente de escalafón'),fact('Asignación personal',person?`B${person.assignment.initialBlock} · ${person.assignment.group}${person.assignment.subgroup}`:'Pendiente de escalafón'),fact('Preferencia '+state.year,preference?`B${preference.block} · ${preference.withinBlockPriority}/12`:'Pendiente'),fact('Puesto anual simulado',annualOrder?`${annualOrder.simulatedAnnualOrder} / ${state.draw.length}`:'Pendiente'));
+  $('profileFacts').replaceChildren(fact('Grupo de descanso',groupLabel(result?.restGroup??state.calculationOptions.yearPlans?.[state.year]?.restGroup??p.restGroup)),fact('Escalafón',p.seniorityRank??'Pendiente'),fact('Número simulado',state.number),fact('Orden inicial del sorteo',person?.lotteryOrder!=null?`${person.lotteryOrder} / ${state.draw.length}`:'Pendiente de escalafón'),fact('Asignación personal',person?`B${person.assignment.initialBlock} · ${person.assignment.group}${person.assignment.subgroup}`:'Pendiente de escalafón'),fact('Preferencia '+state.year,preference?`B${preference.block} · ${preference.withinBlockPriority}/12`:'Pendiente'),fact('Puesto anual simulado',annualOrder?`${annualOrder.simulatedAnnualOrder} / ${state.draw.length}`:'Pendiente'));
   const plan=result?.periodsKnown===false?null:result?.plan??p.years[state.year];
   $('vacations').textContent=datesText(plan?.vacations);$('pfa').textContent=datesText(plan?.pfa);
   $('medicalMode').value=state.calculationOptions.medicalModes?.[state.year]??'inside';
@@ -50,11 +52,11 @@ function renderProfile(result){
   const simulatedGroup=periodsModified(plan)?periodCatalog.periods.find(p=>JSON.stringify(p.vacations)===JSON.stringify(plan.vacations)&&JSON.stringify(p.pfa)===JSON.stringify(plan.pfa)):null;
   $('periodLabel').textContent=simulatedGroup?'Grupo simulado: '+simulatedGroup.code:(plan?.periodLabel?'Referencia PDF: '+plan.periodLabel:'')+(periodsModified(plan)?' · Fechas modificadas en este escenario.':'');
   $('profileSource').textContent=`Archivo: ${state.dataset.version}. ${plan?.sourceReference??state.dataset.sourceReference}`;
-  $('editPeriods').disabled=!p.years[state.year]||state.year!==periodCatalog.year;$('restorePeriods').disabled=!p.years[state.year];
+
 }
 const periodDays=ranges=>(ranges??[]).reduce((total,r)=>total+datesBetween(r.start,r.end).length,0);
 function renderPeriodAnalysis(result){
- const plan=result?.periodsKnown===false?null:result?.plan??state.profile.years[state.year];
+ const plan=result?.periodsKnown===false?null:result?.plan??scenarioProfile().years[state.year];
  $('periodAnalysisTitle').textContent=plan?.periodLabel??'Periodos del año';
  $('periodAnalysisHelp').textContent=plan?'Días naturales, incluidos ambos extremos. Criterio del PDF: invierno de 28 días = 7 iniciales de vacaciones y 21 de PFA. R.M. es descanso compensatorio y se mantiene separado.'+(periodsModified(plan)?' Estás viendo fechas modificadas en el escenario; puedes restaurar las del PDF.':'')+((plan.medicalRestDates??[]).some(d=>inRanges(d,plan.vacations)||inRanges(d,plan.pfa))?' R.M. coincide con un periodo modificado: conserva su fecha de origen y no añade un segundo día libre.':''):'Faltan los periodos preasignados de este año.';
  const rows=[];
@@ -66,7 +68,7 @@ function renderPeriodAnalysis(result){
 function renderMetrics(result){
   const next=state.year+1;
   if(!result?.ready&&result?.periodsReady){$('metrics').replaceChildren(metric('Vacaciones',`${periodDays(result.plan.vacations)} d`,'Incluye los 7 días iniciales del invierno de 28 días, cuando corresponde.'),metric('Fiestas agrupadas',`${periodDays(result.plan.pfa)} d`,'PFA separado de vacaciones; días naturales.'),metric('Descanso R.M.',`${result.plan.medicalRestDates?.length??0} d`,result.reason));return;}
-  if(!result?.ready){const carry=result?.projectedFromPreviousYear??null;$('metrics').replaceChildren(metric('Datos del año','Pendientes',result?.reason??'Falta el plan anual.'),metric('Proyección recibida',amount(carry),`Generada en ${state.year-1}; no es un saldo publicado.`,signClass(carry)),metric('Grupo de descanso',groupLabel(state.profile.restGroup),'Preasignación documental o grupo declarado cuando falta.'));return;}
+  if(!result?.ready){const carry=result?.projectedFromPreviousYear??null;$('metrics').replaceChildren(metric('Datos del año','Pendientes',result?.reason??'Falta el plan anual.'),metric('Proyección recibida',amount(carry),`Generada en ${state.year-1}; no es un saldo publicado.`,signClass(carry)),metric('Grupo de descanso',groupLabel(state.calculationOptions.yearPlans?.[state.year]?.restGroup??state.profile.restGroup),'Preasignación documental o grupo declarado cuando falta.'));return;}
   $('metrics').replaceChildren(metric('Trabajo previsto',`${result.plannedWorkDays} d`,`${journeys(result.workMinutes)} · objetivo: ${journeys(result.annualTargetMinutes)}`),metric(`Proyección para ${next}`,amount(result.projectedNextYearMinutes,result.plan.dailyMinutes),result.annualTargetMinutes==null?'Falta el objetivo anual para calcular el balance.':'Saldo provisional generado este año.',signClass(result.projectedNextYearMinutes)),metric('Descansos elegidos',`${result.plan.selections.filter(s=>s.kind==='rest_credit').length} d`,`${result.currentWeekdayRests??0} del año en lunes a viernes · saldo anterior por separado.`));
 }
 function allowedDay(day,result){
@@ -81,7 +83,7 @@ function chooseDate(date){
     const dates=(old.selections??[]).map(s=>s.date),i=dates.indexOf(date);
     if(i>=0)dates.splice(i,1);else dates.push(date);
     const selections=allocateChoices(dates,result.daily,state.year,result.budget,result.plan.dailyMinutes);
-    const proposed={...old,selections};overridePlan(state.profile,state.year,proposed);state.overrides[state.year]=proposed;const check=current();if(!check.ready)throw Error(check.reason);render();$('calendar').querySelector(`[data-date="${date}"]`)?.focus({preventScroll:true});}
+    const proposed={...old,selections};overridePlan(scenarioProfile(),state.year,proposed);state.overrides[state.year]=proposed;const check=current();if(!check.ready)throw Error(check.reason);render();$('calendar').querySelector(`[data-date="${date}"]`)?.focus({preventScroll:true});}
   catch(error){state.overrides[state.year]=old;setNotice(error.message);}
 }
 function renderCalendar(result){
@@ -95,7 +97,7 @@ function renderCalendar(result){
   if((!result?.ready&&!result?.periodsReady)||result?.periodsKnown===false){$('month').disabled=true;$('periodFilter').disabled=true;$('calendarHelp').textContent=result?.reason??'Faltan los periodos y el calendario del año. Puedes declarar un total de jornadas en Cómputo.';return;}
   $('calendarHelp').textContent=`Pulsa un día para añadirlo o retirarlo. De lunes a viernes se consumen primero los días del año; los del cómputo anterior se usan después o en fin de semana. Cómputo de ${state.year-1}: lunes a domingo. Días de ${state.year}: lunes a viernes, incluidos festivos. Petición de febrero a diciembre y sujeta a cupo. Esta prueba no reserva fechas en Metro.`;
   if(!result.calendarReady)$('calendarHelp').textContent=(periodsModified(result.plan)?'Vacaciones y PFA modificados en el escenario; R.M. conserva su fecha de origen. ':'Vacaciones, PFA y R.M. extraídos del PDF. ')+result.reason+' Los demás días no tienen descanso/trabajo determinado; las elecciones de fechas quedan pendientes. Puedes estimar el balance con un total de jornadas en Cómputo.';
-  if(result.calendarReady&&missingOpening)$('calendarHelp').textContent='La selección está pendiente del saldo anterior. Indícalo abajo o prueba expresamente con saldo cero.';
+  if(result.calendarReady&&missingOpening)$('calendarHelp').textContent=state.year===2027?'La selección está pendiente del saldo anterior. Indícalo arriba o prueba expresamente con saldo cero.':`Falta el saldo que llega de ${state.year-1}. Revisa el plan y el saldo de los años anteriores antes de elegir fechas.`;
   else if(result.calendarReady&&result.ready){
     const available=Math.max(result.currentRemainingMinutes??0,Math.abs(result.unresolvedOpeningMinutes??0));
     if(available!=null&&Math.abs(available)<result.plan.dailyMinutes)$('calendarHelp').textContent='No quedan jornadas completas disponibles en el saldo seleccionado. Puedes retirar elecciones o revisar el saldo anterior en Cómputo.';
@@ -146,28 +148,16 @@ function render(){
   let result;try{result=current();}catch(error){setNotice(error.message);return;}
   $('year').value=state.year;$('previousYear').disabled=state.year<=2027;$('nextYear').disabled=state.year>=2100;
   $('dataBanner').textContent=state.dataset.version==='example-2027-approved-v1'?'EJEMPLO EXPLICADO · DNE ficticio. Calendario GR1 y periodo 1A de 2027. Saldo anterior supuesto y cupos no comprobados.':state.dataset.demo?'DEMOSTRACIÓN · Todos los DNE, periodos, objetivos y calendarios son ficticios.':'DATOS IMPORTADOS PARA SIMULAR · Consulta la referencia del archivo. Las elecciones no modifican el escalafón ni se envían a Metro.';
-  $('pageTitle').textContent={compute:'Mi cómputo',calendar:'Mi calendario',analysis:'Mi balance anual',rotation:'Mi rotación'}[state.view];
-  document.querySelectorAll('[data-view]').forEach(b=>{if(b.dataset.view===state.view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
-  for(const view of ['compute','calendar','analysis','rotation'])$(view+'View').hidden=view!==state.view;
-  renderProfile(result);renderComputation(result);renderMetrics(result);renderCalendar(result);renderAnalysis(result);renderRotation();renderLearning(result,state.year);
+  if(state.year!==2027&&state.calculationOptions.yearPlans?.[state.year]?.projection)$('dataBanner').textContent=`SIMULACIÓN ${state.year} · Descansos y periodos proyectados desde 2027. No es una asignación ni un calendario oficial.`;
+  $('pageTitle').textContent='Mi calendario · '+state.year;
+  syncAnnualForm();
+  $('openingForm').hidden=state.year!==2027;$('annualOpeningSummary').hidden=state.year===2027;
+  $('annualOpeningSummary').textContent=`Saldo recibido de ${state.year-1}: ${amount(result?.budget?.opening)}. Se calcula con tu plan del año anterior.`;
+  renderProfile(result);renderComputation(result);renderMetrics(result);renderCalendar(result);renderAnalysis(result);renderRotation();renderLearning(result,state.year);$('annualPlanHelp').textContent=state.year===2027?'Asignaciones de 2027 como punto de partida. Los cambios solo afectan a esta simulación.':(state.calculationOptions.yearPlans?.[state.year]?.projection?'Proyección de descansos y fechas de 2027: no es una asignación oficial. '+((state.calculationOptions.yearPlans?.[state.year]?.restGroup==='SDF')?'Para SDF faltan los festivos futuros que no estén cargados.':''):'Elige grupo y vacaciones para preparar este año.');
 }
 function setYear(year){
   if(!Number.isInteger(year)||year<2027||year>2100){setNotice('Elige un año entre 2027 y 2100.');$('year').value=state.year;return;}
   state.year=year;state.calculationOptions.medicalModes={...state.calculationOptions.medicalModes,[year]:state.calculationOptions.medicalModes?.[year]??'inside'};syncYearForm();setNotice('');render();
-}
-function openPeriods(){
- const plan=current()?.plan??state.profile.years[state.year];
- $('periodGroup').replaceChildren();
- const original=state.profile.years[state.year];
- const options=[{code:'original',label:'Mi preasignación',vacations:original.vacations,pfa:original.pfa},...periodCatalog.periods.map(p=>({...p,label:'Grupo '+p.code}))];
- for(const period of options){const option=node('option',`${period.label} · Vacaciones: ${datesText(period.vacations)} · PFA: ${datesText(period.pfa)}`);option.value=period.code;$('periodGroup').append(option);}
- $('periodGroup').value=options.find(p=>JSON.stringify(p.vacations)===JSON.stringify(plan.vacations)&&JSON.stringify(p.pfa)===JSON.stringify(plan.pfa))?.code??'original';
- $('periodError').textContent='';$('periodDialog').showModal();
-}
-function applyPeriods(vacations,pfa){
-  const old=state.overrides[state.year]??{},existing=old.selections??[],selections=existing.filter(s=>!inRanges(s.date,vacations)&&!inRanges(s.date,pfa));
-  const next={...old,vacations,pfa,selections};overridePlan(state.profile,state.year,next);state.overrides[state.year]=next;render();
-  setNotice(`Fechas actualizadas solo en tu simulación.${existing.length!==selections.length?' Se han retirado '+(existing.length-selections.length)+' elecciones que coinciden con los nuevos periodos.':''}`);
 }
 $('entryForm').onsubmit=enter;
 $('random').onclick=()=>{$('lottery').value=randomLottery();$('lotteryMode').value='random';};
@@ -181,14 +171,7 @@ $('previousYear').onclick=()=>setYear(state.year-1);$('nextYear').onclick=()=>se
 for(let i=0;i<12;i++){const option=node('option',months[i]);option.value=i;$('month').append(option);}
 $('periodFilter').onchange=()=>{state.period=$('periodFilter').value;renderCalendar(current());};
 $('month').onchange=()=>{state.month=$('month').value;renderCalendar(current());};
-for(const button of document.querySelectorAll('[data-view]'))button.onclick=()=>{state.view=button.dataset.view;setNotice('');render();};
-$('editPeriods').onclick=openPeriods;$('closePeriods').onclick=()=>$('periodDialog').close();
-$('periodForm').onsubmit=event=>{event.preventDefault();try{
- const code=$('periodGroup').value,period=code==='original'?state.profile.years[state.year]:periodCatalog.periods.find(p=>p.code===code);
- if(state.year!==periodCatalog.year||!period)throw Error('Elige un grupo de vacaciones de 2027.');
- applyPeriods(period.vacations,period.pfa);$('periodDialog').close();
-}catch(error){$('periodError').textContent=error.message;}};
-$('restorePeriods').onclick=()=>{const plan=state.profile.years[state.year];try{applyPeriods(plan.vacations,plan.pfa);}catch(error){setNotice(error.message);}};
+
 $('resetChoices').onclick=()=>{state.overrides[state.year]={...(state.overrides[state.year]??{}),selections:[]};render();setNotice('Se han vaciado las elecciones de este año. La preasignación importada se conserva.');};
 $('download').onclick=()=>{const result={schema:'scmm-personal-simulation-v1',datasetVersion:state.dataset.version,dne:state.profile.dne,lottery:{number:state.number,mode:state.mode},overrides:state.overrides,calculationOptions:state.calculationOptions,policyVersion:POLICY.version,profileSetup:{restGroup:state.profile.restGroup,plan2027:state.profile.years[2027]},exportedAt:new Date().toISOString(),demo:state.dataset.demo};const url=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'}));const a=node('a');a.href=url;a.download=`simulacion-mte-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;a.click();URL.revokeObjectURL(url);};
 $('restoreSimulation').onclick=()=>$('simulationFile').click();
@@ -249,7 +232,7 @@ $('yearTotalsForm').onsubmit=event=>{
  }catch(error){$('totalsError').textContent=error.message;}
 };
 $('clearYearTotals').onclick=()=>{delete state.calculationOptions.yearlyTotals[state.year];syncYearForm();render();setNotice('El cálculo vuelve a los datos del calendario y del archivo.');};
-$('showCalendar').onclick=()=>{state.view='calendar';render();};
+$('showCalendar').onclick=()=>$('calendarView').scrollIntoView({behavior:'smooth'});
 $('auditMonth').onchange=()=>renderDayAudit(current());
 for(let i=0;i<12;i++){const option=node('option',months[i]);option.value=i+1;$('auditMonth').append(option);}
 
@@ -275,10 +258,10 @@ async function loadDefaults(){
 }
 syncEntry();loadDefaults();
 
-$('calendarEnterOpening').onclick=()=>{state.view='compute';render();$('openingForm').scrollIntoView({block:'center',behavior:'smooth'});$('openingAmount').focus({preventScroll:true});};
+$('calendarEnterOpening').onclick=()=>{render();$('openingForm').scrollIntoView({block:'center',behavior:'smooth'});$('openingAmount').focus({preventScroll:true});};
 $('calendarZeroOpening').onclick=()=>{state.calculationOptions.opening2026Minutes=0;syncComputationForms();render();setNotice('Simulación con saldo anterior cero. Puedes modificarlo en Cómputo.');};
 
-$('medicalMode').onchange=()=>{const mode=$('medicalMode').value;if(mode==='outside'){const rests=state.profile.years[state.year]?.medicalRestDates??[];const old=state.overrides[state.year]??{};state.overrides[state.year]={...old,selections:(old.selections??[]).filter(s=>!rests.includes(s.date))};}state.calculationOptions.medicalModes={...state.calculationOptions.medicalModes,[state.year]:mode};render();setNotice(mode==='inside'?'R.M. dentro de jornada: objetivo de 202 jornadas, sin descanso compensatorio.':'R.M. fuera de jornada: objetivo de 201 jornadas y descanso compensatorio preasignado.');};
+$('medicalMode').onchange=()=>{const mode=$('medicalMode').value;if(mode==='outside'){const rests=scenarioProfile().years[state.year]?.medicalRestDates??[];const old=state.overrides[state.year]??{};state.overrides[state.year]={...old,selections:(old.selections??[]).filter(s=>!rests.includes(s.date))};}state.calculationOptions.medicalModes={...state.calculationOptions.medicalModes,[state.year]:mode};render();setNotice(mode==='inside'?'R.M. dentro de jornada: objetivo de 202 jornadas, sin descanso compensatorio.':'R.M. fuera de jornada: objetivo de 201 jornadas y descanso compensatorio preasignado.');};
 
 function startExplainedExample(opening){
  state.dataset=explainedExample(opening);syncEntry();$('dne').value=state.dataset.entries[0].dne;$('lottery').value='00000';$('lotteryMode').value='nino';enter();state.view='calendar';render();setNotice('Ejemplo explicado abierto. Cambia los días y comprueba qué saldo consumes. El número de sorteo 00000 es solo un supuesto.');
@@ -289,3 +272,39 @@ $('openGuide').onclick=()=>{renderLearning(state.profile?current():null,state.ye
 $('closeGuide').onclick=()=>$('guideDialog').close();
 $('inspectDay').onclick=()=>showDayExplanation($('inspectDate').value,current(),state.year);
 $('inspectDate').onchange=()=>showDayExplanation($('inspectDate').value,current(),state.year);
+
+for(const g of REST_GROUPS){const option=node('option',groupLabel(g));option.value=String(g);$('annualRestGroup').append(option);}
+function syncAnnualForm(){
+ const choice=state.calculationOptions.yearPlans?.[state.year];
+ $('annualRestGroup').value=String(choice?.restGroup??state.profile.restGroup??'');
+ $('annualPeriod').replaceChildren();
+ const original=state.profile.years[state.year];
+ const first=node('option',original?'Mis vacaciones preasignadas':'Elige un grupo de vacaciones');first.value=original?'original':'';$('annualPeriod').append(first);
+ for(const p of periodCatalog.periods){const option=node('option',`Grupo ${p.code}`);option.value=p.code;$('annualPeriod').append(option);}
+ $('annualPeriod').value=choice?.periodCode??(original?'original':'');
+ $('annualProjection').checked=choice?.projection??(state.year!==2027);
+ $('annualProjectionLabel').hidden=state.year===2027;
+ $('annualYearLabel').textContent=state.year;
+}
+$('annualPlanForm').onsubmit=event=>{
+ event.preventDefault();
+ const previousOptions=state.calculationOptions,previousOverrides=state.overrides;
+ try{
+  const choice={restGroup:$('annualRestGroup').value,periodCode:$('annualPeriod').value,projection:$('annualProjection').checked};
+  const options=validateOptions({...previousOptions,yearPlans:{...previousOptions.yearPlans,[state.year]:choice}});
+  const proposedScenario=annualScenario(state.dataset,state.profile,options.yearPlans);
+  const old=state.overrides[state.year]??{},count=old.selections?.length??0;
+  const priorProfile=scenarioProfile(),priorPlan=priorProfile.years[state.year]?overridePlan(priorProfile,state.year,old):null,nextPlan=proposedScenario.profile.years[state.year];
+  const previousGroup=previousOptions.yearPlans?.[state.year]?.restGroup??state.profile.restGroup;
+  const changed=previousGroup!==options.yearPlans[state.year].restGroup||JSON.stringify(priorPlan?.vacations)!==JSON.stringify(nextPlan?.vacations)||JSON.stringify(priorPlan?.pfa)!==JSON.stringify(nextPlan?.pfa)||Boolean(previousOptions.yearPlans?.[state.year]?.projection)!==options.yearPlans[state.year].projection;
+  const yearlyTotals={...options.yearlyTotals};delete yearlyTotals[state.year];
+  state.calculationOptions={...options,yearlyTotals};
+  if(changed){const {vacations,pfa,...rest}=old;state.overrides={...state.overrides,[state.year]:{...rest,selections:[]}};}
+  render();setNotice(`Plan de ${state.year} aplicado.${changed&&count?' Se han retirado '+count+' elecciones de este año para recalcular con el nuevo grupo y vacaciones.':''}`);
+ }catch(error){state.calculationOptions=previousOptions;state.overrides=previousOverrides;setNotice(error.message);}
+};
+$('annualPlanReset').onclick=()=>{
+ const plans={...state.calculationOptions.yearPlans};delete plans[state.year];
+ state.calculationOptions={...state.calculationOptions,yearPlans:plans};
+ const overrides={...state.overrides};delete overrides[state.year];state.overrides=overrides;render();setNotice('Restaurados los datos iniciales de este año.');
+};
