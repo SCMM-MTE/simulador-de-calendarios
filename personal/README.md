@@ -16,8 +16,8 @@ las páginas 4–6: fórmula del sorteo, llenado y rotación.
 
 - Número oficial inicial: primer premio del Niño, 06/01/2027. ONCE y aleatorio
   son escenarios, aunque utilicen la misma fórmula.
-- Ordinal inicial: `floor(número × plantilla / 100000) + 1`, sobre DNE ordenados
-  numéricamente, con vuelta circular. Escalafón y orden de sorteo son campos distintos.
+- Ordinal inicial: `floor(número × plantilla / 100000) + 1`, sobre el escalafón ordenado
+  por antigüedad, con vuelta circular. El resultado identifica el DNE de inicio; el DNE no determina el orden. Sin escalafón completo no se fabrica un reparto.
 - Llenado: 1–13/A1, 1–13/B1, 1–13/C1, ... A4/B4/C4, segunda plaza, etc.
 - Bloques: 1,13,2,12,3,11,4,10,5,9,6,8,7. Giro interno de grupos cada tres años y
   subgrupos cada cuatro. Continuidad después de 2039 confirmada por el usuario

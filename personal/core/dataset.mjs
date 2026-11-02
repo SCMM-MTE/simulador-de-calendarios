@@ -43,7 +43,7 @@ export function validateDataset(input) {
     const holidays=[...new Set(raw.holidays??[])];holidays.forEach(d=>{parseDate(d);if(!d.startsWith(year+'-'))throw Error('Festivo fuera de su año.');});
     calendars[year]={groups,holidays,sourceReference:text(raw.sourceReference,'la referencia del calendario'),verified:raw.verified===true};
   }
-  return freeze({schema:input.schema,version,sourceReference,entries,calendars,demo:input.demo===true,rosterReady:input.rosterReady!==false});
+  return freeze({schema:input.schema,version,sourceReference,entries,calendars,demo:input.demo===true,rosterReady:input.rosterReady!==false&&entries.every(e=>e.seniorityRank!==null)});
 }
 export function profileFor(dataset,id) {return dataset.entries.find(p=>p.dne===dne(id))??null;}
 export function overridePlan(profile,year,override={}) {

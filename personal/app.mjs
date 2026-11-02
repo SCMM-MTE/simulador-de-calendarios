@@ -1,3 +1,5 @@
+import {renderLearning,showDayExplanation,renderDrawStart} from './learning.mjs';
+import {explainedExample} from './core/example-2027.mjs';
 import {automaticChoice,allocateChoices} from './core/automatic-choices.mjs';
 import {enroll,REST_GROUPS,groupLabel} from './core/enrollment.mjs';
 import {validateDataset,profileFor,rosterCsvToDataset,overridePlan} from './core/dataset.mjs';
@@ -36,10 +38,11 @@ function enter(event){
   }catch(error){$('entryError').textContent=error.message;}
 }
 function periodsModified(plan){const original=state.profile?.years[state.year];return Boolean(plan&&original&&(JSON.stringify(plan.vacations)!==JSON.stringify(original.vacations)||JSON.stringify(plan.pfa)!==JSON.stringify(original.pfa)));}
+function assignedPerson(){return state.draw.find(p=>p.dne===state.profile.dne)??(state.profile.officialAssignment?{assignment:state.profile.officialAssignment,assignmentOrigin:'Asignación importada; se mantiene aunque falte el escalafón completo',lotteryOrder:null}:null);}
 function renderProfile(result){
-  const p=state.profile,person=state.draw.find(e=>e.dne===p.dne),preference=person?annualPreference(person.assignment,state.year):null,annualOrder=person?annualRosterOrder(state.draw,state.year).find(e=>e.dne===p.dne):null;
+  const p=state.profile,person=assignedPerson(),preference=person?annualPreference(person.assignment,state.year):null,annualOrder=person?annualRosterOrder(state.draw,state.year).find(e=>e.dne===p.dne):null;
   $('profileDne').textContent=`DNE ${p.dne}`;
-  $('profileFacts').replaceChildren(fact('Grupo de descanso',p.restGroup?groupLabel(p.restGroup)+(profileFor(state.dataset,p.dne)?.restGroup!=null?' · preasignado':' · declarado'):'Pendiente de carga'),fact('Escalafón',p.seniorityRank??'Pendiente'),fact('Número simulado',state.number),fact('Orden inicial del sorteo',person?`${person.lotteryOrder} / ${state.draw.length}`:'Pendiente de escalafón'),fact('Asignación personal',person?`B${person.assignment.initialBlock} · ${person.assignment.group}${person.assignment.subgroup}`:'Pendiente de escalafón'),fact('Preferencia '+state.year,preference?`B${preference.block} · ${preference.withinBlockPriority}/12`:'Pendiente'),fact('Puesto anual simulado',annualOrder?`${annualOrder.simulatedAnnualOrder} / ${state.draw.length}`:'Pendiente'));
+  $('profileFacts').replaceChildren(fact('Grupo de descanso',p.restGroup?groupLabel(p.restGroup)+(profileFor(state.dataset,p.dne)?.restGroup!=null?' · preasignado':' · declarado'):'Pendiente de carga'),fact('Escalafón',p.seniorityRank??'Pendiente'),fact('Número simulado',state.number),fact('Orden inicial del sorteo',person?.lotteryOrder!=null?`${person.lotteryOrder} / ${state.draw.length}`:'Pendiente de escalafón'),fact('Asignación personal',person?`B${person.assignment.initialBlock} · ${person.assignment.group}${person.assignment.subgroup}`:'Pendiente de escalafón'),fact('Preferencia '+state.year,preference?`B${preference.block} · ${preference.withinBlockPriority}/12`:'Pendiente'),fact('Puesto anual simulado',annualOrder?`${annualOrder.simulatedAnnualOrder} / ${state.draw.length}`:'Pendiente'));
   const plan=result?.periodsKnown===false?null:result?.plan??p.years[state.year];
   $('vacations').textContent=datesText(plan?.vacations);$('pfa').textContent=datesText(plan?.pfa);
   $('medicalMode').value=state.calculationOptions.medicalModes?.[state.year]??'inside';
@@ -107,11 +110,11 @@ function renderCalendar(result){
     for(let i=0;i<offset;i++)grid.append(node('span'));
     for(const date of result.daily.filter(d=>d.date.startsWith(prefix))){
       const label=date.vacation?'Vacaciones':date.pfa?'PFA':date.medicalRest?'Descanso R.M.':date.rest?'Descanso fijo':date.rest==null?'Descanso/trabajo pendiente':'Trabajo';
-      const kind=date.selection?.kind;const button=node('button',String(Number(date.date.slice(8))),'day'+(date.vacation?' vacation':date.pfa?' pfa':date.medicalRest?' medical':date.rest?' rest':date.rest==null?' unknown':'')+(date.holiday?' holiday':'')+(kind?' chosen':''));button.type='button';button.dataset.date=date.date;
+      const kind=date.selection?.kind;const button=node('button',String(Number(date.date.slice(8))),'day'+(date.vacation?' vacation':date.pfa?' pfa':date.medicalRest?' medical':date.rest?' rest':date.rest==null?' unknown':'')+(date.holiday?' holiday':'')+(kind?' chosen '+(date.selection.originYear===state.year?'chosen-current':'chosen-prior'):''));button.type='button';button.dataset.date=date.date;
       if(date.medicalRest)button.append(node('small','RM'));
       if(kind)button.append(node('small',kind==='work_debit'?'DT':date.selection.originYear===state.year?'Año':'Anterior'));
-      button.setAttribute('aria-pressed',String(Boolean(kind)));button.setAttribute('aria-label',`${displayDate(date.date)}, ${dayNames[date.weekday]}. ${label}${date.holiday?', festivo':''}${kind?', elegido '+(kind==='rest_credit'?'descanso':'trabajo'):''}`);
-      button.title=button.getAttribute('aria-label');button.disabled=!allowedDay(date,result);button.onclick=()=>chooseDate(date.date);grid.append(button);
+      button.setAttribute('aria-pressed',String(Boolean(kind)));button.setAttribute('aria-label',`${displayDate(date.date)}, ${dayNames[date.weekday]}. ${label}${date.holiday?', festivo':''}${kind?', elegido '+(kind==='rest_credit'?'descanso':'trabajo')+' de '+date.selection.originYear:''}`);
+      button.onfocus=()=>showDayExplanation(date.date,current(),state.year);button.onpointerenter=()=>showDayExplanation(date.date,current(),state.year);button.title=button.getAttribute('aria-label');button.disabled=!allowedDay(date,result);button.onclick=()=>chooseDate(date.date);grid.append(button);
     }
     box.append(grid);$('calendar').append(box);
   }
@@ -129,10 +132,11 @@ function renderAnalysis(result){
   if(!choices.length){const tr=node('tr'),td=cell('Todavía no has elegido días de este año.');td.colSpan=4;tr.append(td);$('choicesBody').append(tr);}
 }
 function renderRotation(){
-  const person=state.draw.find(p=>p.dne===state.profile.dne);
+  renderDrawStart(state.draw,state.number);
+  const person=assignedPerson();
   if(!person){$('rotationCards').replaceChildren(card('Escalafón pendiente','Sin sorteo','El listado de vacaciones no se usa como plantilla para calcular el orden del sorteo.'));$('fillOrder').replaceChildren();$('rotationBody').replaceChildren();$('rotationSource').textContent='Los periodos del PDF pueden consultarse sin deducir una asignación de regularización. Se incorporará el escalafón cuando esté disponible.';return;}
   const pref=annualPreference(person.assignment,state.year);
-  $('rotationCards').replaceChildren(card('Asignación personal',`B${person.assignment.initialBlock} · ${person.assignment.group}${person.assignment.subgroup}`,person.assignmentOrigin),card('Preferencia '+state.year,`Bloque ${pref.block}`,`${pref.permanentSlot}: posición ${pref.withinBlockPriority} de las 12 unidades del bloque.`),card('Orden inicial',`${person.lotteryOrder} / ${state.draw.length}`,`Plantilla ordenada por DNE. El escalafón importado se muestra por separado.`));
+  $('rotationCards').replaceChildren(card('Asignación personal',`B${person.assignment.initialBlock} · ${person.assignment.group}${person.assignment.subgroup}`,person.assignmentOrigin),card('Preferencia '+state.year,`Bloque ${pref.block}`,`${pref.permanentSlot}: posición ${pref.withinBlockPriority} de las 12 unidades del bloque.`),card('Orden inicial',person.lotteryOrder==null?'Pendiente de escalafón':`${person.lotteryOrder} / ${state.draw.length}`,`Reparto sobre la plantilla ordenada por escalafón. El DNE identifica a la persona.`));
   $('fillOrder').replaceChildren(...[0,1,12,13,26,39,155,156].map(i=>{const s=slotAt(i);return node('span',`${i+1}: B${s.initialBlock} · ${s.group}${s.subgroup} · p${s.seat}`);}));
   $('rotationBody').replaceChildren(...Array.from({length:Math.min(15,2101-2027)},(_,i)=>{const r=annualPreference(person.assignment,2027+i),tr=node('tr');tr.append(cell(r.year),cell(r.block),cell(r.permanentSlot),cell(`${r.withinBlockPriority} / 12`));return tr;}));
   $('rotationSource').textContent=`${evidence.title}, páginas 4–6. SHA-256 ${evidence.sha256}. ${evidence.continuationReference} El puesto anual mostrado es una ordenación del escenario, no una cita oficial. Los ajustes de Nombramiento importados prevalecen.`;
@@ -141,11 +145,11 @@ function render(){
   if(!state.profile)return;
   let result;try{result=current();}catch(error){setNotice(error.message);return;}
   $('year').value=state.year;$('previousYear').disabled=state.year<=2027;$('nextYear').disabled=state.year>=2100;
-  $('dataBanner').textContent=state.dataset.demo?'DEMOSTRACIÓN · Todos los DNE, periodos, objetivos y calendarios son ficticios.':'DATOS IMPORTADOS PARA SIMULAR · Consulta la referencia del archivo. Las elecciones no modifican el escalafón ni se envían a Metro.';
+  $('dataBanner').textContent=state.dataset.version==='example-2027-approved-v1'?'EJEMPLO EXPLICADO · DNE ficticio. Calendario GR1 y periodo 1A de 2027. Saldo anterior supuesto y cupos no comprobados.':state.dataset.demo?'DEMOSTRACIÓN · Todos los DNE, periodos, objetivos y calendarios son ficticios.':'DATOS IMPORTADOS PARA SIMULAR · Consulta la referencia del archivo. Las elecciones no modifican el escalafón ni se envían a Metro.';
   $('pageTitle').textContent={compute:'Mi cómputo',calendar:'Mi calendario',analysis:'Mi balance anual',rotation:'Mi rotación'}[state.view];
   document.querySelectorAll('[data-view]').forEach(b=>{if(b.dataset.view===state.view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
   for(const view of ['compute','calendar','analysis','rotation'])$(view+'View').hidden=view!==state.view;
-  renderProfile(result);renderComputation(result);renderMetrics(result);renderCalendar(result);renderAnalysis(result);renderRotation();
+  renderProfile(result);renderComputation(result);renderMetrics(result);renderCalendar(result);renderAnalysis(result);renderRotation();renderLearning(result,state.year);
 }
 function setYear(year){
   if(!Number.isInteger(year)||year<2027||year>2100){setNotice('Elige un año entre 2027 y 2100.');$('year').value=state.year;return;}
@@ -275,3 +279,13 @@ $('calendarEnterOpening').onclick=()=>{state.view='compute';render();$('openingF
 $('calendarZeroOpening').onclick=()=>{state.calculationOptions.opening2026Minutes=0;syncComputationForms();render();setNotice('Simulación con saldo anterior cero. Puedes modificarlo en Cómputo.');};
 
 $('medicalMode').onchange=()=>{const mode=$('medicalMode').value;if(mode==='outside'){const rests=state.profile.years[state.year]?.medicalRestDates??[];const old=state.overrides[state.year]??{};state.overrides[state.year]={...old,selections:(old.selections??[]).filter(s=>!rests.includes(s.date))};}state.calculationOptions.medicalModes={...state.calculationOptions.medicalModes,[state.year]:mode};render();setNotice(mode==='inside'?'R.M. dentro de jornada: objetivo de 202 jornadas, sin descanso compensatorio.':'R.M. fuera de jornada: objetivo de 201 jornadas y descanso compensatorio preasignado.');};
+
+function startExplainedExample(opening){
+ state.dataset=explainedExample(opening);syncEntry();$('dne').value=state.dataset.entries[0].dne;$('lottery').value='00000';$('lotteryMode').value='nino';enter();state.view='calendar';render();setNotice('Ejemplo explicado abierto. Cambia los días y comprueba qué saldo consumes. El número de sorteo 00000 es solo un supuesto.');
+}
+$('exampleCredit').onclick=()=>startExplainedExample(4);
+$('exampleDebit').onclick=()=>startExplainedExample(-3);
+$('openGuide').onclick=()=>{renderLearning(state.profile?current():null,state.year);$('guideDialog').showModal();};
+$('closeGuide').onclick=()=>$('guideDialog').close();
+$('inspectDay').onclick=()=>showDayExplanation($('inspectDate').value,current(),state.year);
+$('inspectDate').onchange=()=>showDayExplanation($('inspectDate').value,current(),state.year);
