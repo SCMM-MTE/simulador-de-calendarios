@@ -36,3 +36,6 @@ yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# Local browser state must never be versioned.
+/.edge-headless/
