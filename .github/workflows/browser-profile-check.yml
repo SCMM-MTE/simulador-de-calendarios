@@ -1,0 +1,16 @@
+name: Comprobar perfiles de navegador
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  browser-profile-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - shell: bash
+        run: git ls-files -z | node scripts/check-browser-profiles.mjs

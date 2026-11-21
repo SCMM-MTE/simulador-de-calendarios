@@ -38,4 +38,14 @@ yarn-error.log*
 Thumbs.db
 
 # Local browser state must never be versioned.
-/.edge-headless/
+.edge-headless/
+.chrome-profile/
+.chromium-profile/
+.playwright-profile/
+browser-profile/
+browser-profiles/
+User Data/
+**/Default/Network/Cookies*
+**/Profile */Network/Cookies*
+**/Default/Login Data*
+**/Profile */Login Data*
