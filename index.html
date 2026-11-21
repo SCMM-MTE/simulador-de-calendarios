@@ -87,6 +87,10 @@ const { useState, useMemo, useCallback, useEffect, useRef } = React;
 const ANCHOR_MONDAY = new Date(2021, 0, 4); 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_WEEK = 7 * MS_PER_DAY;
+const civilDayOffset = (from, to) =>
+    (Date.UTC(to.getFullYear(), to.getMonth(), to.getDate()) -
+     Date.UTC(from.getFullYear(), from.getMonth(), from.getDate())) / MS_PER_DAY;
+
 const PRESSURE_LEVEL_UNIT = 2.5;
 const REQUIRED_LAB_DAYS_A = 7;
 const DEFAULT_FLEX_DAYS_A = 5;
@@ -589,6 +593,12 @@ const PAP_CONFIG_KEYS = {
     septiembre: { lab: 'pap_septiembre_lab', sab: 'pap_septiembre_sab', dom: 'pap_septiembre_dom' }
 };
 
+// Anexo X del Convenio 2025–2027, PDF 189. Referencia para simulación, no adjudicación.
+const newYearsEvePapQuota = (year, month, day, weekday) =>
+    year >= 2025 && year <= 2027 && month === 11 && day === 31
+        ? weekday === 0 ? 37 : 55
+        : null;
+
 const getEasterDate = (year) => {
     const a = year % 19;
     const b = Math.floor(year / 100);
@@ -649,7 +659,7 @@ const getAdjustedPfaRangeForScenario = (year, pfaOpt, targetGroupShift) => {
     const originalStart = new Date(year, pfaOpt.start.m, pfaOpt.start.d);
     let actualStart = new Date(originalStart);
     const originalEnd = new Date(year, pfaOpt.end.m, pfaOpt.end.d);
-    const durationMs = originalEnd.getTime() - originalStart.getTime();
+    const durationDays = civilDayOffset(originalStart, originalEnd);
     const isDecemberPfa11To31 = pfaOpt.start.m === 11 && pfaOpt.start.d === 11;
     let safety = 0;
     while (isBaseRestForGroup(actualStart, targetGroupShift) && safety < 10) {
@@ -657,10 +667,9 @@ const getAdjustedPfaRangeForScenario = (year, pfaOpt, targetGroupShift) => {
         safety++;
     }
     const pfaStart = actualStart.getTime();
-    let pfaEnd = pfaStart + durationMs;
-    if (isDecemberPfa11To31 && actualStart.getTime() < originalStart.getTime()) {
-        pfaEnd = originalEnd.getTime();
-    }
+    const actualEnd = new Date(actualStart);
+    actualEnd.setDate(actualEnd.getDate() + durationDays);
+    const pfaEnd = isDecemberPfa11To31 && actualStart < originalStart ? originalEnd.getTime() : actualEnd.getTime();
     return { pfaStart, pfaEnd };
 };
 
@@ -674,6 +683,14 @@ const getVacationRangesForScenario = (year, vacationRow, pfaOpt, groupShift) => 
 const isVacationForScenario = (date, ranges) => {
     const t = date.getTime();
     return (t >= ranges.summerStart && t <= ranges.summerEnd) || (t >= ranges.pfaStart && t <= ranges.pfaEnd);
+};
+
+const countVacationOverlap = (start, end, ranges) => {
+    let overlap = 0;
+    for (const date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+        if (isVacationForScenario(date, ranges)) overlap++;
+    }
+    return overlap;
 };
 
 const buildRedDaysSetBForScenario = (year, groupShift, subGroupIdx) => {
@@ -1439,6 +1456,7 @@ const SimuladorEngine = React.memo(function SimuladorEngine({ tipo, config, setC
         if (!selectedVacationRow) return null;
         return selectedVacationRow.pfa[pfaIdx] || selectedVacationRow.pfa[0] || null;
     }, [selectedVacationRow, pfaIdx]);
+    const isRestForGroup = isBaseRestForGroup;
     const selectedRMDate = useMemo(() => {
         if (!enableVacations || !selectedVacationRow || !selectedPfaOption) return null;
         return getAdjustedRmDateForScenario(year, selectedVacationRow, selectedPfaOption, groupShift, isRestForGroup);
@@ -1448,33 +1466,10 @@ const SimuladorEngine = React.memo(function SimuladorEngine({ tipo, config, setC
         return `${selectedRMDate.getMonth()}-${selectedRMDate.getDate()}`;
     }, [selectedRMDate]);
 
-    const isRestForGroup = useCallback((date, gShift) => {
-        const dow = date.getDay();
-        const diff = dow === 0 ? 6 : dow - 1;
-        const mon = new Date(date); mon.setDate(date.getDate() - diff); mon.setHours(0,0,0,0);
-        const wb = Math.round((mon - ANCHOR_MONDAY) / MS_PER_WEEK);
-        let si = (wb - gShift) % 4; if (si < 0) si += 4;
-        return SEQUENCE[si].includes(dow);
-    }, []);
-
-    const getAdjustedPfaRange = useCallback((pfaOpt, targetGroupShift) => {
-        const originalStart = new Date(year, pfaOpt.start.m, pfaOpt.start.d);
-        let actualStart = new Date(originalStart);
-        const originalEnd = new Date(year, pfaOpt.end.m, pfaOpt.end.d);
-        const durationMs = originalEnd.getTime() - originalStart.getTime();
-        const isDecemberPfa11To31 = pfaOpt.start.m === 11 && pfaOpt.start.d === 11;
-        let safety = 0;
-        while (isRestForGroup(actualStart, targetGroupShift) && safety < 10) {
-            actualStart.setDate(actualStart.getDate() + (isDecemberPfa11To31 ? -1 : 1));
-            safety++;
-        }
-        const pfaStart = actualStart.getTime();
-        let pfaEnd = pfaStart + durationMs;
-        if (isDecemberPfa11To31 && actualStart.getTime() < originalStart.getTime()) {
-            pfaEnd = originalEnd.getTime();
-        }
-        return { pfaStart, pfaEnd };
-    }, [year, isRestForGroup]);
+    const getAdjustedPfaRange = useCallback(
+        (pfaOpt, targetGroupShift) => getAdjustedPfaRangeForScenario(year, pfaOpt, targetGroupShift),
+        [year]
+    );
 
     const annualVacationRanges = useMemo(() => {
         if (!enableVacations || !selectedVacationRow || !selectedPfaOption) return null;
@@ -1744,6 +1739,8 @@ const SimuladorEngine = React.memo(function SimuladorEngine({ tipo, config, setC
     }, [tipo, year, festivosSet, config, getFactorPresionA, getActiveMteForDate, mtePrecedenteTotal, getBaseQuotaA, getAutoPriorityForMonthA]);
 
     const getCupoPAP = useCallback((m, d, dayOfWeek) => {
+        const special = newYearsEvePapQuota(year, m, d, dayOfWeek);
+        if (special !== null) return special;
         let temporada = 'invierno';
         if (m === 5 && d > 15) temporada = 'junioQ2';
         else if (m === 6) temporada = 'julio';
@@ -1755,7 +1752,7 @@ const SimuladorEngine = React.memo(function SimuladorEngine({ tipo, config, setC
         const configured = key ? Number(config[key]) : NaN;
         if (Number.isFinite(configured) && configured >= 0) return configured;
         return CUPOS_PAP[temporada][tipoDia];
-    }, [config]);
+    }, [config, year]);
 
     const getCupoForDay = useCallback((m, d, esSD, esF) => {
         if (tipo === 'B' || tipo === 'C') return 100;
@@ -1868,13 +1865,7 @@ const SimuladorEngine = React.memo(function SimuladorEngine({ tipo, config, setC
                 if (p.remainingMTE < 0.1) continue;
                 const availableCycles = workList.filter(c => {
                     if (c.allocated >= CYCLE_CAPACITY) return false;
-                    let overlap = 0;
-                    for (let t = c.start.getTime(); t <= c.end.getTime(); t += MS_PER_DAY) {
-                        let inVacation = false;
-                        if (t >= p.summerStart && t <= p.summerEnd) inVacation = true;
-                        else if (t >= p.pfaStart && t <= p.pfaEnd) inVacation = true;
-                        if(inVacation) overlap++;
-                    }
+                    const overlap = countVacationOverlap(c.start, c.end, p);
                     return overlap <= (config.maxSolapamiento || 3); 
                 });
                 if (availableCycles.length === 0) continue; 
@@ -1906,7 +1897,7 @@ const SimuladorEngine = React.memo(function SimuladorEngine({ tipo, config, setC
             const isBlocked = remainingCupo === 0; 
             let isIncompatible = false; let overlapCount = 0;
             if (userVac) {
-                for (let t = cycle.start.getTime(); t <= cycle.end.getTime(); t += MS_PER_DAY) { if ((t >= userVac.summerStart && t <= userVac.summerEnd) || (t >= userVac.pfaStart && t <= userVac.pfaEnd)) overlapCount++; }
+                overlapCount = countVacationOverlap(cycle.start, cycle.end, userVac);
                 if (overlapCount > (config.maxSolapamiento || 3)) isIncompatible = true;
             }
             let availabilityLevel = isBlocked ? 'blocked' : (isIncompatible ? 'incompatible' : (occupationPercent >= 80 ? 'low' : (occupationPercent >= 50 ? 'medium' : 'high')));
@@ -1929,10 +1920,7 @@ const SimuladorEngine = React.memo(function SimuladorEngine({ tipo, config, setC
             for (const f of fragmentsC) {
                 let hasCompatibleCycle = false;
                 for (const c of monthCycles) {
-                    let overlap = 0;
-                    for (let t = c.start.getTime(); t <= c.end.getTime(); t += MS_PER_DAY) {
-                        if ((t >= f.summerStart && t <= f.summerEnd) || (t >= f.pfaStart && t <= f.pfaEnd)) overlap++;
-                    }
+                    const overlap = countVacationOverlap(c.start, c.end, f);
                     if (overlap <= (config.maxSolapamiento || 3)) {
                         hasCompatibleCycle = true;
                         break;
@@ -3413,8 +3401,8 @@ const SimuladorAnalisis = React.memo(function SimuladorAnalisis({ config, onBack
                     pfaOriginalStart.setHours(0, 0, 0, 0);
                     const pfaAdjustedStart = new Date(ranges.pfaStart);
                     pfaAdjustedStart.setHours(0, 0, 0, 0);
-                    const pfaStartShiftDays = Math.round((pfaAdjustedStart.getTime() - pfaOriginalStart.getTime()) / MS_PER_DAY);
-                    const rmShiftDays = (rmDate && rmBaseDate) ? Math.round((rmDate.getTime() - rmBaseDate.getTime()) / MS_PER_DAY) : 0;
+                    const pfaStartShiftDays = civilDayOffset(pfaOriginalStart, pfaAdjustedStart);
+                    const rmShiftDays = (rmDate && rmBaseDate) ? civilDayOffset(rmBaseDate, rmDate) : 0;
                     const commonScenarioInfo = {
                         rmDayTs: rmDate ? rmDate.getTime() : null,
                         rmBaseDayTs: rmBaseDate ? rmBaseDate.getTime() : null,
